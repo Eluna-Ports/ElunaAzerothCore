@@ -13593,6 +13593,10 @@ LootItem* Player::StoreLootItem(uint8 lootSlot, Loot* loot, InventoryResult& msg
             sLootItemStorage->RemoveStoredLootItem(loot->containerGUID, item->itemid, item->count, loot, item->itemIndex);
 
         sScriptMgr->OnPlayerLootItem(this, newitem, item->count, this->GetLootGUID());
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+            e->OnLootItem(this, newitem, item->count, this->GetLootGUID());
+#endif
     }
     else
     {
@@ -14060,6 +14064,11 @@ void Player::LearnTalent(uint32 talentId, uint32 talentRank, bool command /*= fa
     }
 
     sScriptMgr->OnPlayerLearnTalents(this, talentId, talentRank, spellId);
+
+#ifdef ELUNA
+    if (Eluna* e = GetEluna())
+        e->OnLearnTalents(this, talentId, talentRank, spellId);
+#endif
 }
 
 void Player::LearnPetTalent(ObjectGuid petGuid, uint32 talentId, uint32 talentRank)

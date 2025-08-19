@@ -2579,6 +2579,11 @@ Item* Player::StoreNewItem(ItemPosCountVec const& dest, uint32 item, bool update
         }
 
         sScriptMgr->OnPlayerStoreNewItem(this, pItem, count);
+
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+            e->OnAdd(this, pItem);
+#endif
     }
     return pItem;
 }
@@ -2832,6 +2837,14 @@ Item* Player::EquipItem(uint16 pos, Item* pItem, bool update)
 
         ApplyEquipCooldown(pItem2);
         sScriptMgr->OnPlayerEquip(this, pItem2, bag, slot, update);
+
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+        {
+            e->OnEquip(this, pItem2, bag, slot); // This should be removed in the future
+            e->OnItemEquip(this, pItem2, slot);
+        }
+#endif
         return pItem2;
     }
 
@@ -2841,6 +2854,14 @@ Item* Player::EquipItem(uint16 pos, Item* pItem, bool update)
 
     sScriptMgr->OnPlayerEquip(this, pItem, bag, slot, update);
     UpdateForQuestWorldObjects();
+
+#ifdef ELUNA
+    if (Eluna* e = GetEluna())
+    {
+        e->OnEquip(this, pItem, bag, slot); // This should be removed in the future
+        e->OnItemEquip(this, pItem, slot);
+    }
+#endif
     return pItem;
 }
 
@@ -2864,6 +2885,14 @@ void Player::QuickEquipItem(uint16 pos, Item* pItem)
         UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EQUIP_EPIC_ITEM, pItem->GetEntry(), slot);
 
         sScriptMgr->OnPlayerEquip(this, pItem, (pos >> 8), slot, true);
+
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+        {
+            e->OnEquip(this, pItem, (pos >> 8), slot); // This should be removed in the future
+            e->OnItemEquip(this, pItem, slot);
+        }
+#endif
     }
 }
 
@@ -2936,6 +2965,11 @@ void Player::RemoveItem(uint8 bag, uint8 slot, bool update, bool swap)
 
                 _ApplyItemMods(pItem, slot, false);
             }
+
+#ifdef ELUNA
+            if (Eluna* e = GetEluna())
+                e->OnItemUnEquip(this, pItem, slot);
+#endif
 
             m_items[slot] = nullptr;
 
@@ -3106,6 +3140,11 @@ void Player::DestroyItem(uint8 bag, uint8 slot, bool update)
 
                 // equipment visual show
                 SetVisibleItemSlot(slot, nullptr);
+
+#ifdef ELUNA
+                if (Eluna* e = GetEluna())
+                    e->OnItemUnEquip(this, pItem, slot);
+#endif
             }
 
             m_items[slot] = nullptr;

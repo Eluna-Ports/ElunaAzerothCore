@@ -377,7 +377,7 @@ index 000000000..58f14ceaf
 +endif()
 diff --git a/eluna.diff b/eluna.diff
 new file mode 100644
-index 000000000..3177c752a
+index 000000000..e57823a45
 --- /dev/null
 +++ b/eluna.diff
 @@ -0,0 +1,208 @@
@@ -627,6 +627,157 @@ index 22c7d5fd7..7e3742e61 100644
  if (BUILD_APPLICATION_WORLDSERVER OR BUILD_TOOLS_MAPS)
    target_link_libraries(common
      PUBLIC
+diff --git a/src/server/apps/worldserver/worldserver.conf.dist b/src/server/apps/worldserver/worldserver.conf.dist
+index 9b36fe680..77c52235e 100644
+--- a/src/server/apps/worldserver/worldserver.conf.dist
++++ b/src/server/apps/worldserver/worldserver.conf.dist
+@@ -69,6 +69,8 @@
+ #    DEBUG
+ #    DYNAMIC RESPAWN SETTINGS
+ #
++#  ELUNA SETTINGS
++#
+ ###################################################################################################
+ 
+ ###################################################################################################
+@@ -657,6 +659,7 @@ Appender.Console=1,4,0,"1 9 3 6 5 8"
+ Appender.Server=2,5,0,Server.log,w
+ # Appender.GM=2,5,15,gm_%s.log
+ Appender.Errors=2,2,0,Errors.log,w
++Appender.Eluna=2,5,3,Eluna.log,a
+ # Appender.DB=3,5,0
+ 
+ #  Logger config values: Given a logger "name"
+@@ -690,6 +693,7 @@ Logger.sql=4,Console Server
+ Logger.time.update=4,Console Server
+ Logger.module=4,Console Server
+ Logger.spells.scripts=2,Console Errors
++Logger.eluna=4,Console Eluna
+ #Logger.achievement=4,Console Server
+ #Logger.addon=4,Console Server
+ #Logger.ahbot=4,Console Server
+@@ -4601,6 +4605,91 @@ Respawn.DynamicMinimumGameObject = 10
+ #
+ ###################################################################################################
+ 
++###################################################################################################
++#  ELUNA SETTINGS
++#
++#   Eluna.Enabled
++#       Description: Enable or disable Eluna LuaEngine.
++#       Default:     true  - (enabled)
++#                    false - (disabled)
++#
++#   Eluna.TraceBack
++#       Description: Sets whether to use debug.traceback function on a lua error or not.
++#                    Notice that you can redefine the function.
++#       Default:     false - (use default error output)
++#                    true  - (use debug.traceback function)
++#
++#   Eluna.ScriptReloader
++#       Description: Enable or disable the automated script reloader.
++#                    This will automatically reload Eluna when it detects changes to scripts.
++#       Default:     false - (disabled)
++#                    true  - (enabled)
++#
++#   Eluna.ReloadCommand
++#       Description: Enable or disable the .reload eluna command.
++#       Default:     true  - (enabled)
++#                    false - (disabled)
++#
++#   Eluna.UseUnsafeMethods
++#       Description: Enable or disable the usage of unsafe methods.
++#                    Unsafe methods are disabled by default to prevent accidental, harmful, or performance-degrading usage.
++#                    Only enable this setting if strictly necessary, and check documentation for alternative methods.
++#       Default:     true  - (enabled)
++#                    false - (disabled)
++#
++#   Eluna.UseDeprecatedMethods
++#       Description: Enable or disable the usage of deprecated methods.
++#                    Deprecated methods may be removed in future versions and are disabled by default.
++#                    Check documentation for alternative methods.
++#       Default:     true  - (enabled)
++#                    false - (disabled)
++#
++#   Eluna.OnlyOnMaps
++#       Description: When Eluna is enabled, a state will only be created for a list of specified maps.
++#                    This only works for multistate mode.
++#       Default:     ""  - (enabled on all maps)
++#                    "0,1,2,..." - (enabled on specific maps only)
++#
++#   Eluna.ScriptPath
++#       Description: Sets the location of the script folder to load scripts from.
++#                    The path can be relative or absolute.
++#       Default:     "lua_scripts"
++#
++#   Eluna.RequirePaths
++#       Description: Sets the location of additional require paths.
++#                    These paths are absolute and follows the standard Lua require path patterns.
++#                    Below are a set of "standard" paths used by most package managers.
++#                    "/usr/share/%s/?.lua;/usr/local/share/lua/%s/?.lua;/usr/local/share/lua/%s/?/init.lua;/usr/share/lua/%s/?.lua;/usr/share/lua/%s/?/init.lua;"
++#       Default:     ""
++#
++#   Eluna.RequireCPaths
++#       Description: Sets the location of additional require C paths.
++#                    These paths are absolute and follows the standard Lua require path patterns.
++#                    Below are a set of "standard" paths used by most package managers.
++#                    "/usr/local/lib/lua/%s/?.so;/usr/lib/x86_64-linux-gnu/lua/%s/?.so;/usr/local/lib/lua/%s/loadall.so;"
++#       Default:     ""
++#
++#   Eluna.ReloadSecurityLevel
++#        Description: Sets the security level required to use the .reload eluna command.
++#                     0 - (Player)
++#                     1 - (Moderator)
++#                     2 - (Game Master)
++#        Default:     3 - (Administrator)
++#                     4 - (Console)
++#
++
++Eluna.Enabled = true
++Eluna.TraceBack = false
++Eluna.ScriptReloader = false
++Eluna.ReloadCommand = true
++Eluna.UseUnsafeMethods = true
++Eluna.UseDeprecatedMethods = true
++Eluna.OnlyOnMaps = ""
++Eluna.ScriptPath = "lua_scripts"
++Eluna.RequirePaths = ""
++Eluna.RequireCPaths = ""
++Eluna.ReloadSecurityLevel = 3
++
+ ###################################################################################################
+ #                                                                                                 #
+ # GAME SETTINGS END                                                                               #
+diff --git a/src/server/game/AI/SmartScripts/SmartScript.cpp b/src/server/game/AI/SmartScripts/SmartScript.cpp
+index e0a6f4fb8..2cc4a246b 100644
+--- a/src/server/game/AI/SmartScripts/SmartScript.cpp
++++ b/src/server/game/AI/SmartScripts/SmartScript.cpp
+@@ -895,7 +895,7 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
+                         go->SetLootState(GO_READY);
+                     }
+ 
+-                    go->UseDoorOrButton(0, e.action.activateObject.alternative, unit);
++                    go->UseDoorOrButton(0, !!e.action.activateObject.alternative, unit);
+                     LOG_DEBUG("sql.sql", "SmartScript::ProcessAction:: SMART_ACTION_ACTIVATE_GOBJECT. Gameobject {} activated", go->GetGUID().ToString());
+                 }
+             }
+@@ -1485,14 +1485,14 @@ void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, u
+         {
+             for (WorldObject* target : targets)
+                 if (IsUnit(target))
+-                    target->ToUnit()->SetVisible(e.action.visibility.state);
++                    target->ToUnit()->SetVisible(!!e.action.visibility.state);
+ 
+             break;
+         }
+         case SMART_ACTION_SET_ACTIVE:
+         {
+             for (WorldObject* target : targets)
+-                target->setActive(e.action.setActive.state);
++                target->setActive(!!e.action.setActive.state);
+             break;
+         }
+         case SMART_ACTION_ATTACK_START:
 diff --git a/src/server/game/Achievements/AchievementMgr.cpp b/src/server/game/Achievements/AchievementMgr.cpp
 index f96775eb4..91699c82b 100644
 --- a/src/server/game/Achievements/AchievementMgr.cpp
@@ -653,6 +804,19 @@ index f96775eb4..91699c82b 100644
      // reward items and titles if any
      AchievementReward const* reward = sAchievementMgr->GetAchievementReward(achievement);
  
+diff --git a/src/server/game/AuctionHouse/AuctionHouseMgr.cpp b/src/server/game/AuctionHouse/AuctionHouseMgr.cpp
+index dcc1b7662..736fd46e1 100644
+--- a/src/server/game/AuctionHouse/AuctionHouseMgr.cpp
++++ b/src/server/game/AuctionHouse/AuctionHouseMgr.cpp
+@@ -488,7 +488,7 @@ void AuctionHouseObject::AddAuction(AuctionEntry* auction)
+ 
+ bool AuctionHouseObject::RemoveAuction(AuctionEntry* auction)
+ {
+-    bool wasInMap = _auctionsMap.erase(auction->Id);
++    bool wasInMap = !!_auctionsMap.erase(auction->Id);
+     sAuctionMgr->GetAuctionHouseSearcher()->RemoveAuction(auction);
+ 
+     sScriptMgr->OnAuctionRemove(this, auction);
 diff --git a/src/server/game/Battlegrounds/Battleground.cpp b/src/server/game/Battlegrounds/Battleground.cpp
 index 7ddd4e87e..37d443cc3 100644
 --- a/src/server/game/Battlegrounds/Battleground.cpp
@@ -822,6 +986,32 @@ index c15e4d9a8..47ca09688 100644
      return false;
  }
  
+diff --git a/src/server/game/Chat/HyperlinkTags.cpp b/src/server/game/Chat/HyperlinkTags.cpp
+index 2cb36b698..342ba3035 100644
+--- a/src/server/game/Chat/HyperlinkTags.cpp
++++ b/src/server/game/Chat/HyperlinkTags.cpp
+@@ -206,7 +206,7 @@ bool Acore::Hyperlinks::LinkTags::spell::StoreTo(SpellInfo const*& val, std::str
+     if (!(t.TryConsumeTo(spellId) && t.IsEmpty()))
+         return false;
+ 
+-    return (val = sSpellMgr->GetSpellInfo(spellId));
++    return !!(val = sSpellMgr->GetSpellInfo(spellId));
+ }
+ 
+ bool Acore::Hyperlinks::LinkTags::talent::StoreTo(TalentLinkData& val, std::string_view text)
+diff --git a/src/server/game/Conditions/ConditionMgr.cpp b/src/server/game/Conditions/ConditionMgr.cpp
+index 09edfab28..93bdc0c8a 100644
+--- a/src/server/game/Conditions/ConditionMgr.cpp
++++ b/src/server/game/Conditions/ConditionMgr.cpp
+@@ -68,7 +68,7 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo)
+             {
+                 // don't allow 0 items (it's checked during table load)
+                 ASSERT(ConditionValue2);
+-                bool checkBank = ConditionValue3;
++                bool checkBank = !!ConditionValue3;
+                 condMeets = player->HasItemCount(ConditionValue1, ConditionValue2, checkBank);
+             }
+         }
 diff --git a/src/server/game/Entities/Creature/Creature.cpp b/src/server/game/Entities/Creature/Creature.cpp
 index 8ef6206bb..320fe2db0 100644
 --- a/src/server/game/Entities/Creature/Creature.cpp
@@ -860,6 +1050,19 @@ index 8ef6206bb..320fe2db0 100644
          if (GetZoneScript())
              GetZoneScript()->OnCreatureRemove(this);
  
+diff --git a/src/server/game/Entities/Creature/CreatureGroups.h b/src/server/game/Entities/Creature/CreatureGroups.h
+index 54b01c08c..2cb6e9ae8 100644
+--- a/src/server/game/Entities/Creature/CreatureGroups.h
++++ b/src/server/game/Entities/Creature/CreatureGroups.h
+@@ -67,7 +67,7 @@ struct FormationInfo
+     uint32 point_1;
+     uint32 point_2;
+ 
+-    bool HasGroupFlag(uint16 flag) const { return (groupAI & flag); }
++    bool HasGroupFlag(uint16 flag) const { return !!(groupAI & flag); }
+ };
+ 
+ typedef std::unordered_map<ObjectGuid::LowType/*memberDBGUID*/, FormationInfo /*formationInfo*/>   CreatureGroupInfoType;
 diff --git a/src/server/game/Entities/GameObject/GameObject.cpp b/src/server/game/Entities/GameObject/GameObject.cpp
 index 1fa5a4177..27ac808f3 100644
 --- a/src/server/game/Entities/GameObject/GameObject.cpp
@@ -1163,6 +1366,19 @@ index 6d5e8b24c..d5221e8d3 100644
  }
  
  void Player::LearnPetTalent(ObjectGuid petGuid, uint32 talentId, uint32 talentRank)
+diff --git a/src/server/game/Entities/Player/Player.h b/src/server/game/Entities/Player/Player.h
+index 16a97177e..adc4f04c0 100644
+--- a/src/server/game/Entities/Player/Player.h
++++ b/src/server/game/Entities/Player/Player.h
+@@ -1692,7 +1692,7 @@ public:
+ 
+     bool RemoveMItem(ObjectGuid::LowType itemLowGuid)
+     {
+-        return mMitems.erase(itemLowGuid);
++        return !!mMitems.erase(itemLowGuid);
+     }
+ 
+     void PetSpellInitialize();
 diff --git a/src/server/game/Entities/Player/PlayerQuest.cpp b/src/server/game/Entities/Player/PlayerQuest.cpp
 index 9f663ff2f..fb22a372c 100644
 --- a/src/server/game/Entities/Player/PlayerQuest.cpp
@@ -1996,11 +2212,11 @@ index ce316965e..53c00d122 100644
  
 diff --git a/src/server/game/LuaEngine b/src/server/game/LuaEngine
 new file mode 160000
-index 000000000..e23dfbc43
+index 000000000..25f52b8d1
 --- /dev/null
 +++ b/src/server/game/LuaEngine
 @@ -0,0 +1 @@
-+Subproject commit e23dfbc4304ae9463e0812a6be8897e9eaa8bde6
++Subproject commit 25f52b8d11e1f239790f91cc8d6ee16ae94e83c1
 diff --git a/src/server/game/Maps/Map.cpp b/src/server/game/Maps/Map.cpp
 index 9ad4cfb4e..dd779d1d6 100644
 --- a/src/server/game/Maps/Map.cpp

@@ -63,6 +63,9 @@
 #include "Util.h"
 #include "World.h"
 #include "WorldPacket.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
 /// @todo: this import is not necessary for compilation and marked as unused by the IDE
 //  however, for some reasons removing it would cause a damn linking issue
@@ -2330,6 +2333,15 @@ InventoryResult Player::CanUseItem(ItemTemplate const* proto) const
     {
         return result;
     }
+
+#ifdef ELUNA
+    if (Eluna* e = GetEluna())
+    {
+        InventoryResult eres = e->OnCanUseItem(this, proto->ItemId);
+        if (eres != EQUIP_ERR_OK)
+            return eres;
+    }
+#endif
 
     return EQUIP_ERR_OK;
 }

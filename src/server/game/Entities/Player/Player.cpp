@@ -90,6 +90,9 @@
 #include "WorldStateDefines.h"
 #include "WorldStatePackets.h"
 #include <cmath>
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
 /// @todo: this import is not necessary for compilation and marked as unused by the IDE
 //  however, for some reasons removing it would cause a damn linking issue
@@ -809,6 +812,10 @@ uint32 Player::EnvironmentalDamage(EnviromentalDamage type, uint32 damage)
         }
 
         UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_DEATHS_FROM, 1, type);
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+            e->OnPlayerKilledByEnvironment(this, type);
+#endif
     }
 
     return final_damage;
@@ -3332,6 +3339,11 @@ void Player::learnSpell(uint32 spellId, bool temporary /*= false*/, bool learnFr
         // pussywizard: a system message "you have learnt spell X (rank Y)"
         if (IsInWorld())
             SendLearnPacket(spellId, true);
+
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+            e->OnLearnSpell(this, spellId);
+#endif
     }
 
     // pussywizard: rank stuff at the end!
@@ -4552,6 +4564,10 @@ void Player::ResurrectPlayer(float restore_percent, bool applySickness)
 
     sScriptMgr->OnPlayerResurrect(this, restore_percent, applySickness);
 
+#ifdef ELUNA
+    if (Eluna* e = GetEluna())
+        e->OnResurrect(this);
+#endif
     if (!applySickness)
     {
         return;
@@ -5818,6 +5834,10 @@ void Player::CheckAreaExploreAndOutdoor()
 
     if (!(currFields & val))
     {
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+            e->OnDiscoverArea(this, GetAreaId());
+#endif
         SetUInt32Value(PLAYER_EXPLORED_ZONES_1 + offset, (uint32)(currFields | val));
 
         UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EXPLORE_AREA, areaId);

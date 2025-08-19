@@ -33,6 +33,9 @@
 #include <map>
 #include <unordered_map>
 
+#ifdef ELUNA
+class Eluna;
+#endif
 class Object;
 class WorldPacket;
 class WorldSocket;
@@ -243,6 +246,10 @@ public:
 
     void RemoveOldCorpses() override;
 
+#ifdef ELUNA
+    Eluna* GetEluna() const { return eluna.get(); }
+    std::unique_ptr<Eluna> eluna;
+#endif
 protected:
     void _UpdateGameTime();
     // callback for UpdateRealmCharacters

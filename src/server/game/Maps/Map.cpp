@@ -43,6 +43,10 @@
 #include "Vehicle.h"
 #include "VMapMgr2.h"
 #include "Weather.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#include "ElunaConfig.h"
+#endif
 
 #define MAP_INVALID_ZONE        0xFFFFFFFF
 
@@ -67,7 +71,14 @@ Map::Map(uint32 id, uint32 InstanceId, uint8 SpawnMode, Map* _parent) :
     _transportsUpdateIter(_transports.end()), i_scriptLock(false), _defaultLight(GetDefaultMapLight(id))
 {
     m_parentMap = (_parent ? _parent : this);
+#ifdef ELUNA
+    // lua state begins uninitialized
+    eluna = nullptr;
 
+    if (sElunaConfig->IsElunaEnabled() && sElunaConfig->ShouldMapLoadEluna(id))
+        if (!IsParentMap() || (IsParentMap() && !Instanceable()))
+            eluna = std::make_unique<Eluna>(this);
+#endif
     _zonePlayerCountMap.clear();
     _updatableObjectListRecheckTimer.SetInterval(UPDATABLE_OBJECT_LIST_RECHECK_TIMER);
 
@@ -1695,6 +1706,16 @@ void Map::DelayedUpdate(const uint32 t_diff)
 void Map::AddObjectToRemoveList(WorldObject* obj)
 {
     ASSERT(obj->GetMapId() == GetId() && obj->GetInstanceId() == GetInstanceId());
+
+#ifdef ELUNA
+    if (Eluna* e = GetEluna())
+    {
+        if (Creature* creature = obj->ToCreature())
+            e->OnRemove(creature);
+        else if (GameObject* gameobject = obj->ToGameObject())
+            e->OnRemove(gameobject);
+    }
+#endif
 
     obj->CleanupsBeforeDelete(false);                            // remove or simplify at least cross referenced links
 

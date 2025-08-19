@@ -48,6 +48,9 @@
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSessionMgr.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
 /// @todo: this import is not necessary for compilation and marked as unused by the IDE
 //  however, for some reasons removing it would cause a damn linking issue
@@ -339,6 +342,11 @@ void Creature::AddToWorld()
             GetZoneScript()->OnCreatureCreate(this);
         }
 
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+            e->OnAddToWorld(this);
+#endif
+
         loot.sourceWorldObjectGUID = GetGUID();
 
         sScriptMgr->OnCreatureAddWorld(this);
@@ -350,6 +358,11 @@ void Creature::RemoveFromWorld()
     if (IsInWorld())
     {
         sScriptMgr->OnCreatureRemoveWorld(this);
+
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+            e->OnRemoveFromWorld(this);
+#endif
 
         if (GetZoneScript())
             GetZoneScript()->OnCreatureRemove(this);

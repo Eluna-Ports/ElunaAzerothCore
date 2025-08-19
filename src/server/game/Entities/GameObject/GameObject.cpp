@@ -34,6 +34,9 @@
 #include "Transport.h"
 #include "UpdateFieldFlags.h"
 #include "World.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 #include <G3D/Box.h>
 #include <G3D/CoordinateFrame.h>
 #include <G3D/Quat.h>
@@ -159,6 +162,15 @@ void GameObject::AddToWorld()
 
         WorldObject::AddToWorld();
 
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+        {
+            // one of these should really be deprecated, they serve the exact same purpose
+            e->OnAddToWorld(this);
+            e->OnSpawn(this);
+        }
+#endif
+
         loot.sourceWorldObjectGUID = GetGUID();
 
         sScriptMgr->OnGameObjectAddWorld(this);
@@ -170,6 +182,10 @@ void GameObject::RemoveFromWorld()
     ///- Remove the gameobject from the accessor
     if (IsInWorld())
     {
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+            e->OnRemoveFromWorld(this);
+#endif
         sScriptMgr->OnGameObjectRemoveWorld(this);
 
         if (m_zoneScript)
@@ -446,6 +462,10 @@ bool GameObject::Create(ObjectGuid::LowType guidlow, uint32 name_id, Map* map, u
 
 void GameObject::Update(uint32 diff)
 {
+#ifdef ELUNA
+    if (Eluna* e = GetEluna())
+        e->UpdateAI(this, diff);
+#endif
     WorldObject::Update(diff);
 
     if (AI())
@@ -1477,6 +1497,11 @@ void GameObject::Use(Unit* user)
         if (sScriptMgr->OnGossipHello(playerUser, this))
             return;
 
+#ifdef ELUNA
+        if (Eluna* e = GetEluna())
+            if (e->OnGossipHello(playerUser, this))
+                return;
+#endif
         if (AI()->GossipHello(playerUser, false))
             return;
     }
@@ -2341,6 +2366,10 @@ void GameObject::SetDestructibleState(GameObjectDestructibleState state, Player*
             break;
         case GO_DESTRUCTIBLE_DAMAGED:
             {
+#ifdef ELUNA
+                if (Eluna* e = GetEluna())
+                    e->OnDamaged(this, eventInvoker);
+#endif
                 EventInform(m_goInfo->building.damagedEvent);
 
                 sScriptMgr->OnGameObjectDamaged(this, eventInvoker);
@@ -2371,6 +2400,10 @@ void GameObject::SetDestructibleState(GameObjectDestructibleState state, Player*
             }
         case GO_DESTRUCTIBLE_DESTROYED:
             {
+#ifdef ELUNA
+                if (Eluna* e = GetEluna())
+                    e->OnDestroyed(this, eventInvoker);
+#endif
                 sScriptMgr->OnGameObjectDestroyed(this, eventInvoker);
 
                 EventInform(m_goInfo->building.destroyedEvent);
@@ -2433,6 +2466,10 @@ void GameObject::SetLootState(LootState state, Unit* unit)
     else
         _lootStateUnitGUID.Clear();
 
+#ifdef ELUNA
+    if (Eluna* e = GetEluna())
+        e->OnLootStateChanged(this, state);
+#endif
     AI()->OnStateChanged(state, unit);
     sScriptMgr->OnGameObjectLootStateChanged(this, state, unit);
 
@@ -2462,7 +2499,10 @@ void GameObject::SetLootState(LootState state, Unit* unit)
 void GameObject::SetGoState(GOState state)
 {
     SetByteValue(GAMEOBJECT_BYTES_1, 0, state);
-
+#ifdef ELUNA
+    if (Eluna* e = GetEluna())
+        e->OnGameObjectStateChanged(this, state);
+#endif
     sScriptMgr->OnGameObjectStateChanged(this, state);
 
     if (m_model)

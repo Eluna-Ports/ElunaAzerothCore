@@ -20,12 +20,22 @@
 #include "ScriptMgr.h"
 #include "ScriptMgrMacros.h"
 #include "ScriptedGossip.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#include "Player.h"
+#endif
 
 bool ScriptMgr::OnQuestAccept(Player* player, Item* item, Quest const* quest)
 {
     ASSERT(player);
     ASSERT(item);
     ASSERT(quest);
+
+#ifdef ELUNA
+    if (Eluna* e = player->GetEluna())
+        if (e->OnQuestAccept(player, item, quest))
+            return false;
+#endif
 
     auto ret = IsValidBoolScript<AllItemScript>([&](AllItemScript* script)
     {
@@ -47,6 +57,12 @@ bool ScriptMgr::OnItemUse(Player* player, Item* item, SpellCastTargets const& ta
     ASSERT(player);
     ASSERT(item);
 
+#ifdef ELUNA
+    if (Eluna* e = player->GetEluna())
+        if (!e->OnUse(player, item, targets))
+            return true;
+#endif
+
     auto ret = IsValidBoolScript<AllItemScript>([&](AllItemScript* script)
     {
         return script->CanItemUse(player, item, targets);
@@ -66,6 +82,12 @@ bool ScriptMgr::OnItemExpire(Player* player, ItemTemplate const* proto)
     ASSERT(player);
     ASSERT(proto);
 
+#ifdef ELUNA
+    if (Eluna* e = player->GetEluna())
+        if (e->OnExpire(player, proto))
+            return false;
+#endif
+
     auto ret = IsValidBoolScript<AllItemScript>([&](AllItemScript* script)
     {
         return !script->CanItemExpire(player, proto);
@@ -84,6 +106,12 @@ bool ScriptMgr::OnItemRemove(Player* player, Item* item)
 {
     ASSERT(player);
     ASSERT(item);
+
+#ifdef ELUNA
+    if (Eluna* e = player->GetEluna())
+        if (e->OnRemove(player, item))
+            return false;
+#endif
 
     auto ret = IsValidBoolScript<AllItemScript>([&](AllItemScript* script)
     {
@@ -115,6 +143,11 @@ void ScriptMgr::OnGossipSelect(Player* player, Item* item, uint32 sender, uint32
     ASSERT(player);
     ASSERT(item);
 
+#ifdef ELUNA
+    if (Eluna* e = player->GetEluna())
+        e->HandleGossipSelectOption(player, item, sender, action, "");
+#endif
+
     ExecuteScript<AllItemScript>([&](AllItemScript* script)
     {
         script->OnItemGossipSelect(player, item, sender, action);
@@ -130,6 +163,11 @@ void ScriptMgr::OnGossipSelectCode(Player* player, Item* item, uint32 sender, ui
 {
     ASSERT(player);
     ASSERT(item);
+
+#ifdef ELUNA
+    if (Eluna* e = player->GetEluna())
+        e->HandleGossipSelectOption(player, item, sender, action, code);
+#endif
 
     ExecuteScript<AllItemScript>([&](AllItemScript* script)
     {

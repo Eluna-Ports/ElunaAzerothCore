@@ -59,6 +59,9 @@
 #include "Vehicle.h"
 #include "World.h"
 #include "WorldPacket.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
  /// @todo: this import is not necessary for compilation and marked as unused by the IDE
 //  however, for some reasons removing it would cause a damn linking issue
@@ -780,6 +783,18 @@ void Spell::EffectDummy(SpellEffIndex effIndex)
     {
         sScriptMgr->OnDummyEffect(m_caster, m_spellInfo->Id, effIndex, itemTarget);
     }
+
+#ifdef ELUNA
+    if (Eluna* e = m_caster->GetEluna())
+    {
+        if (gameObjTarget)
+            e->OnDummyEffect(m_caster, m_spellInfo->Id, effIndex, gameObjTarget);
+        else if (unitTarget && unitTarget->GetTypeId() == TYPEID_UNIT)
+            e->OnDummyEffect(m_caster, m_spellInfo->Id, effIndex, unitTarget->ToCreature());
+        else if (itemTarget)
+            e->OnDummyEffect(m_caster, m_spellInfo->Id, effIndex, itemTarget);
+    }
+#endif
 }
 
 void Spell::EffectTriggerSpell(SpellEffIndex effIndex)
@@ -2033,6 +2048,16 @@ void Spell::SendLoot(ObjectGuid guid, LootType loottype)
             gameObjTarget->Use(m_caster);
             return;
         }
+
+#ifdef ELUNA
+        if (Eluna* e = player->GetEluna())
+        {
+            if (e->OnGossipHello(player, gameObjTarget))
+                return;
+            if (e->OnGameObjectUse(player, gameObjTarget))
+                return;
+        }
+#endif
 
         if (sScriptMgr->OnGossipHello(player, gameObjTarget))
             return;

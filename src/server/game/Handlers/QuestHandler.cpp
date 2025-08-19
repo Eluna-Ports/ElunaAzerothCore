@@ -31,6 +31,9 @@
 #include "World.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
 void WorldSession::HandleQuestgiverStatusQueryOpcode(WorldPacket& recvData)
 {
@@ -97,6 +100,12 @@ void WorldSession::HandleQuestgiverHelloOpcode(WorldPacket& recvData)
     if (uint32 pause = creature->GetMovementTemplate().GetInteractionPauseTimer())
         creature->PauseMovement(pause);
     creature->SetHomePosition(creature->GetPosition());
+
+#ifdef ELUNA
+    if (Eluna* e = GetPlayer()->GetEluna())
+        if (e->OnGossipHello(_player, creature))
+            return;
+#endif
 
     if (sScriptMgr->OnGossipHello(_player, creature))
         return;
@@ -316,6 +325,10 @@ void WorldSession::HandleQuestgiverChooseRewardOpcode(WorldPacket& recvData)
                                 }
                             }
 
+#ifdef ELUNA
+                            if (Eluna* e = GetPlayer()->GetEluna())
+                                e->OnQuestReward(_player, questgiver, quest, reward);
+#endif
                             questgiver->AI()->sQuestReward(_player, quest, reward);
                         }
                         break;
@@ -335,7 +348,10 @@ void WorldSession::HandleQuestgiverChooseRewardOpcode(WorldPacket& recvData)
                                     _player->PlayerTalkClass->SendQuestGiverQuestDetails(nextQuest, guid, true);
                                 }
                             }
-
+#ifdef ELUNA
+                            if (Eluna* e = GetPlayer()->GetEluna())
+                                e->OnQuestReward(_player, questGiver, quest, reward);
+#endif
                             questGiver->AI()->QuestReward(_player, quest, reward);
                         }
                         break;
@@ -423,6 +439,11 @@ void WorldSession::HandleQuestLogRemoveQuest(WorldPacket& recvData)
             _player->AbandonQuest(questId); // remove all quest items player received before abandoning quest.
             _player->RemoveActiveQuest(questId);
             _player->RemoveTimedAchievement(ACHIEVEMENT_TIMED_TYPE_QUEST, questId);
+
+#ifdef ELUNA
+            if (Eluna* e = GetPlayer()->GetEluna())
+                e->OnQuestAbandon(_player, questId);
+#endif
 
             sScriptMgr->OnPlayerQuestAbandon(_player, questId);
 

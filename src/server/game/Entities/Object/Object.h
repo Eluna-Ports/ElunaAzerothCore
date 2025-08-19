@@ -38,10 +38,12 @@
 #include <set>
 #include <sstream>
 #include <string>
+#ifdef ELUNA
+#include "ElunaEventMgr.h"
+#include "LuaValue.h"
+#endif
 
 #include "UpdateFields.h"
-
-class ElunaEventProcessor;
 
 enum TempSummonType
 {
@@ -93,6 +95,10 @@ class Unit;
 class Transport;
 class StaticTransport;
 class MotionTransport;
+#ifdef ELUNA
+class ElunaEventProcessor;
+class Eluna;
+#endif
 
 struct PositionFullTerrainStatus;
 
@@ -665,6 +671,17 @@ public:
 
     uint32  LastUsedScriptID;
 
+#ifdef ELUNA
+    std::unique_ptr <ElunaEventProcessor> elunaMapEvents;
+    std::unique_ptr <ElunaEventProcessor> elunaWorldEvents;
+
+    Eluna* GetEluna() const;
+
+    std::unique_ptr<ElunaEventProcessor>& GetElunaEvents(int32 mapId) { return (mapId == -1) ? elunaWorldEvents : elunaMapEvents; }
+
+    LuaVal lua_data = LuaVal({});
+#endif
+
     // Transports
     [[nodiscard]] Transport* GetTransport() const { return m_transport; }
     [[nodiscard]] float GetTransOffsetX() const { return m_movementInfo.transport.pos.GetPositionX(); }
@@ -713,7 +730,6 @@ public:
     ObjectVisibilityContainer const& GetObjectVisibilityContainer() const { return _objectVisibilityContainer; }
 
     // Event handler
-    ElunaEventProcessor* elunaEvents;
     EventProcessor m_Events;
 
 protected:

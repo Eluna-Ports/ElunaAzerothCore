@@ -34,6 +34,9 @@
 #include "Transport.h"
 #include "World.h"
 #include "WorldPacket.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
 MapMgr::MapMgr()
 {

@@ -99,6 +99,11 @@
 #include "WorldStateDefines.h"
 #include <boost/asio/ip/address.hpp>
 #include <cmath>
+#ifdef ELUNA
+#include "LuaEngine.h"
+#include "ElunaLoader.h"
+#include "ElunaConfig.h"
+#endif
 
 std::atomic_long World::_stopEvent = false;
 uint8 World::_exitCode = SHUTDOWN_EXIT_CODE;
@@ -342,6 +347,19 @@ void World::SetInitialWorldSettings()
             exit(1);
         }
     }
+
+#ifdef ELUNA
+    ///- Initialize Lua Engine
+    LOG_INFO("server.loading", "Loading Eluna config...");
+    sElunaConfig->Initialize();
+
+    ///- Initialize Lua Engine
+    if (sElunaConfig->IsElunaEnabled())
+    {
+        LOG_INFO("server.loading", "Loading Lua scripts...");
+        sElunaLoader->LoadScripts();
+    }
+#endif
 
     ///- Initialize pool manager
     sPoolMgr->Initialize();
@@ -855,6 +873,14 @@ void World::SetInitialWorldSettings()
     LOG_INFO("server.loading", "Loading Creature Text Locales...");
     sCreatureTextMgr->LoadCreatureTextLocales();
 
+#ifdef ELUNA
+    if (sElunaConfig->IsElunaEnabled())
+    {
+        LOG_INFO("server.loading", "Starting Eluna world state...");
+        eluna = std::make_unique<Eluna>(nullptr);
+    }
+#endif
+
     LOG_INFO("server.loading", "Loading Scripts...");
     sScriptMgr->LoadDatabase();
 
@@ -999,6 +1025,11 @@ void World::SetInitialWorldSettings()
     sWorldGlobals->LoadAntiDosOpcodePolicies();
 
     sScriptMgr->OnBeforeWorldInitialized();
+
+#ifdef ELUNA
+    if(GetEluna())
+        GetEluna()->OnConfigLoad(false); // Must be done after Eluna is initialized and scripts have run.
+#endif
 
     if (getBoolConfig(CONFIG_PRELOAD_ALL_NON_INSTANCED_MAP_GRIDS))
     {

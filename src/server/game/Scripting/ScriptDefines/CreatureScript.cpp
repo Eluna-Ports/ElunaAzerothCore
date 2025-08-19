@@ -20,6 +20,9 @@
 #include "ScriptMgr.h"
 #include "ScriptMgrMacros.h"
 #include "ScriptedGossip.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
 bool ScriptMgr::OnGossipHello(Player* player, Creature* creature)
 {
@@ -156,6 +159,12 @@ uint32 ScriptMgr::GetDialogStatus(Player* player, Creature* creature)
 CreatureAI* ScriptMgr::GetCreatureAI(Creature* creature)
 {
     ASSERT(creature);
+
+#ifdef ELUNA
+    if (Eluna* e = creature->GetEluna())
+        if (CreatureAI* luaAI = e->GetAI(creature))
+            return luaAI;
+#endif
 
     auto retAI = GetReturnAIScript<AllCreatureScript, CreatureAI>([creature](AllCreatureScript* script)
     {

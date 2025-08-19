@@ -51,6 +51,9 @@
 #include "Vehicle.h"
 #include "World.h"
 #include "WorldPacket.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
 /// @todo: this import is not necessary for compilation and marked as unused by the IDE
 //  however, for some reasons removing it would cause a damn linking issue
@@ -2095,7 +2098,23 @@ void WorldObject::SetMap(Map* map)
     m_currMap = map;
     m_mapId = map->GetId();
     m_InstanceId = map->GetInstanceId();
+#ifdef ELUNA
+    // always reset Map events, then recreate the Map events procesor if Eluna is enabled for the map
+    auto& events = GetElunaEvents(m_mapId);
+    if (events)
+        events.reset();
 
+    if (Eluna* e = map->GetEluna())
+        events = std::make_unique<ElunaEventProcessor>(e, this);
+
+    // create the World events processor
+    if (Eluna* e = sWorld->GetEluna())
+    {
+        auto& events = GetElunaEvents(-1);
+        if (!events)
+            events = std::make_unique<ElunaEventProcessor>(e, this);
+    }
+#endif
     sScriptMgr->OnWorldObjectSetMap(this, map);
 }
 
@@ -2457,6 +2476,16 @@ std::string WorldObject::GetDebugInfo() const
         << "Name: " << GetName();
     return sstr.str();
 }
+
+#ifdef ELUNA
+Eluna* WorldObject::GetEluna() const
+{
+    if (const Map* map = FindMap())
+        return map->GetEluna();
+
+    return nullptr;
+}
+#endif
 
 void WorldObject::GetGameObjectListWithEntryInGrid(std::list<GameObject*>& gameobjectList, uint32 entry, float maxSearchRange) const
 {

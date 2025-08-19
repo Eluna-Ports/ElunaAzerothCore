@@ -1,0 +1,3090 @@
+diff --git a/.gitmodules b/.gitmodules
+new file mode 100644
+index 000000000..7ee57fe19
+--- /dev/null
++++ b/.gitmodules
+@@ -0,0 +1,3 @@
++[submodule "src/server/game/LuaEngine"]
++	path = src/server/game/LuaEngine
++	url = https://github.com/ElunaLuaEngine/Eluna.git
+diff --git a/deps/CMakeLists.txt b/deps/CMakeLists.txt
+index 8364181a9..faaf3be40 100644
+--- a/deps/CMakeLists.txt
++++ b/deps/CMakeLists.txt
+@@ -46,3 +46,7 @@ if (BUILD_TOOLS_MAPS)
+   add_subdirectory(bzip2)
+   add_subdirectory(libmpq)
+ endif()
++
++if (ELUNA)
++  add_subdirectory(lualib)
++endif()
+diff --git a/deps/lualib/CMakeLists.txt b/deps/lualib/CMakeLists.txt
+new file mode 100644
+index 000000000..14bf629cd
+--- /dev/null
++++ b/deps/lualib/CMakeLists.txt
+@@ -0,0 +1,21 @@
++set(LUA_VERSION "lua52" CACHE STRING "Lua version to use")
++set_property(CACHE LUA_VERSION PROPERTY STRINGS luajit lua51 lua52 lua53 lua54)
++MESSAGE(STATUS "Lua version: ${LUA_VERSION}")
++
++# Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
++if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
++  cmake_policy(SET CMP0135 NEW)
++endif()
++
++option(LUA_STATIC "link lua statically" OFF)
++if (LUA_STATIC)
++  MESSAGE(STATUS "Lua linking: static")
++else()
++  MESSAGE(STATUS "Lua linking: dynamic")
++endif()
++
++if (LUA_VERSION MATCHES "luajit")
++  add_subdirectory(luajit)
++else()
++  add_subdirectory(lua)
++endif()
+diff --git a/deps/lualib/lua/CMakeLists.txt b/deps/lualib/lua/CMakeLists.txt
+new file mode 100644
+index 000000000..9d6f3a8bb
+--- /dev/null
++++ b/deps/lualib/lua/CMakeLists.txt
+@@ -0,0 +1,134 @@
++# BSD-3-Clause
++# Copyright (c) 2022, Rochet2 <rochet2@post.com>
++# All rights reserved.
++#
++# Redistribution and use in source and binary forms, with or without
++# modification, are permitted provided that the following conditions are met:
++#
++# * Redistributions of source code must retain the above copyright notice, this
++#   list of conditions and the following disclaimer.
++#
++# * Redistributions in binary form must reproduce the above copyright notice,
++#   this list of conditions and the following disclaimer in the documentation
++#   and/or other materials provided with the distribution.
++#
++# * Neither the name of the copyright holder nor the names of its
++#   contributors may be used to endorse or promote products derived from
++#   this software without specific prior written permission.
++#
++# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
++# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
++# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
++# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++
++project ( lua C )
++
++# LUA_VERSION must be one of lua51, lua52, lua53, lua54
++
++include(FetchContent)
++FetchContent_Declare(
++  lua51
++  URL      https://www.lua.org/ftp/lua-5.1.5.tar.gz
++  URL_HASH SHA256=2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333
++)
++FetchContent_Declare(
++  lua52
++  URL      https://www.lua.org/ftp/lua-5.2.4.tar.gz
++  URL_HASH SHA256=b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b
++)
++FetchContent_Declare(
++  lua53
++  URL      https://www.lua.org/ftp/lua-5.3.6.tar.gz
++  URL_HASH SHA256=fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60
++)
++FetchContent_Declare(
++  lua54
++  URL      https://www.lua.org/ftp/lua-5.4.4.tar.gz
++  URL_HASH SHA256=164c7849653b80ae67bec4b7473b884bf5cc8d2dca05653475ec2ed27b9ebf61
++)
++FetchContent_MakeAvailable(${LUA_VERSION})
++
++# Easen warnings
++string(REGEX REPLACE "( |^)/W[0-9]( |$)" "\\1/W2\\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
++string(REGEX REPLACE "( |^)/W[0-9]( |$)" "\\1/W2\\2" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
++
++set(LUA_SOURCE_FOLDER "${${LUA_VERSION}_SOURCE_DIR}/src")
++
++file(GLOB LOCAL_SOURCES_H ${LUA_SOURCE_FOLDER}/*.h)
++file(GLOB LOCAL_SOURCES_C ${LUA_SOURCE_FOLDER}/*.c)
++# Compile lua as C++ so it uses exceptions instead of longjmp
++# Disabled for now as some libraries expect lua to be C
++# set_source_files_properties(${LOCAL_SOURCES_H} ${LOCAL_SOURCES_C} PROPERTIES LANGUAGE CXX )
++list(REMOVE_ITEM LOCAL_SOURCES_C ${LUA_SOURCE_FOLDER}/lua.c)
++list(REMOVE_ITEM LOCAL_SOURCES_C ${LUA_SOURCE_FOLDER}/luac.c)
++
++if (LUA_STATIC)
++  add_library(lualib STATIC ${LOCAL_SOURCES_H} ${LOCAL_SOURCES_C})
++  set_property(TARGET lualib PROPERTY POSITION_INDEPENDENT_CODE ON)
++else()
++  add_library(lualib SHARED ${LOCAL_SOURCES_H} ${LOCAL_SOURCES_C})
++  set_property(TARGET lualib PROPERTY POSITION_INDEPENDENT_CODE ON)
++endif()
++set_target_properties(lualib PROPERTIES LINKER_LANGUAGE C)
++target_include_directories(lualib PUBLIC "${LUA_SOURCE_FOLDER}" "${CMAKE_CURRENT_SOURCE_DIR}")
++if (WIN32)
++  set_target_properties(lualib PROPERTIES OUTPUT_NAME ${LUA_VERSION})
++  install(TARGETS lualib DESTINATION "${CMAKE_INSTALL_PREFIX}")
++  if (NOT LUA_STATIC)
++    install(FILES $<TARGET_PDB_FILE:lualib> DESTINATION "${CMAKE_INSTALL_PREFIX}" OPTIONAL)
++  endif()
++else()
++  set_target_properties(lualib PROPERTIES PUBLIC_HEADER "${LOCAL_SOURCES_H};${CMAKE_CURRENT_SOURCE_DIR}/lua.hpp")
++  install(TARGETS lualib
++      DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
++      PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_PREFIX}/include"
++  )
++endif()
++if (WIN32)
++  target_compile_definitions(lualib PRIVATE _CRT_SECURE_NO_WARNINGS)
++  if (NOT LUA_STATIC)
++    target_compile_definitions(lualib PRIVATE LUA_BUILD_AS_DLL)
++  endif()
++elseif (APPLE)
++  target_compile_definitions(lualib PUBLIC LUA_USE_MACOSX)
++  target_compile_options(lualib PRIVATE -Wno-deprecated-declarations -Wno-empty-body)
++  target_link_libraries(lualib readline)
++elseif (UNIX)
++  target_compile_definitions(lualib PUBLIC LUA_USE_LINUX)
++  target_link_libraries(lualib ${CMAKE_DL_LIBS} m readline)
++  set_target_properties(lualib PROPERTIES OUTPUT_NAME ${LUA_VERSION})
++endif()
++
++#add_executable(lua_interpreter ${LUA_SOURCE_FOLDER}/lua.c)
++#target_link_libraries(lua_interpreter lualib)
++#target_compile_definitions(lua_interpreter PRIVATE _CRT_SECURE_NO_WARNINGS)
++#set_target_properties(lua_interpreter PROPERTIES OUTPUT_NAME ${LUA_VERSION}_interpreter)
++#if (WIN32)
++#  install(TARGETS lua_interpreter DESTINATION "${CMAKE_INSTALL_PREFIX}")
++#  install(FILES $<TARGET_PDB_FILE:lua_interpreter> DESTINATION "${CMAKE_INSTALL_PREFIX}" OPTIONAL)
++#else()
++#  install(TARGETS lua_interpreter DESTINATION "${CMAKE_INSTALL_PREFIX}/bin")
++#endif()
++#install(TARGETS lualib
++#    DESTINATION "${CMAKE_INSTALL_PREFIX}"
++#    LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}/lua/lib"
++#    RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}/lua/lib"
++#    ARCHIVE DESTINATION "${CMAKE_INSTALL_PREFIX}/lua/lib"
++#)
++
++#add_executable(lua_compiler ${LUA_SOURCE_FOLDER}/luac.c)
++#target_link_libraries(lua_compiler lualib)
++#target_compile_definitions(lua_compiler PRIVATE _CRT_SECURE_NO_WARNINGS)
++#set_target_properties(lua_compiler PROPERTIES OUTPUT_NAME ${LUA_VERSION}_compiler)
++#if (WIN32)
++#  install(TARGETS lua_compiler DESTINATION "${CMAKE_INSTALL_PREFIX}")
++#  install(FILES $<TARGET_PDB_FILE:lua_compiler> DESTINATION "${CMAKE_INSTALL_PREFIX}" OPTIONAL)
++#else()
++#  install(TARGETS lua_compiler DESTINATION "${CMAKE_INSTALL_PREFIX}/bin")
++#endif()
+diff --git a/deps/lualib/lua/lua.hpp b/deps/lualib/lua/lua.hpp
+new file mode 100644
+index 000000000..0e30bf0fd
+--- /dev/null
++++ b/deps/lualib/lua/lua.hpp
+@@ -0,0 +1,10 @@
++// Some lua sources include this file and some do not,
++// so here is the file to be used with all lua sources as some libraries expect it to exist.
++
++#pragma once
++
++extern "C" {
++#include "lua.h"
++#include "lualib.h"
++#include "lauxlib.h"
++}
+diff --git a/deps/lualib/luajit/CMakeLists.txt b/deps/lualib/luajit/CMakeLists.txt
+new file mode 100644
+index 000000000..58f14ceaf
+--- /dev/null
++++ b/deps/lualib/luajit/CMakeLists.txt
+@@ -0,0 +1,155 @@
++# BSD-3-Clause
++# Copyright (c) 2022, Rochet2 <rochet2@post.com>
++# All rights reserved.
++#
++# Redistribution and use in source and binary forms, with or without
++# modification, are permitted provided that the following conditions are met:
++#
++# * Redistributions of source code must retain the above copyright notice, this
++#   list of conditions and the following disclaimer.
++#
++# * Redistributions in binary form must reproduce the above copyright notice,
++#   this list of conditions and the following disclaimer in the documentation
++#   and/or other materials provided with the distribution.
++#
++# * Neither the name of the copyright holder nor the names of its
++#   contributors may be used to endorse or promote products derived from
++#   this software without specific prior written permission.
++#
++# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
++# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
++# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
++# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++
++project ( lua C )
++
++# Download source
++include(FetchContent)
++FetchContent_Declare(
++  luajit21
++  GIT_REPOSITORY https://github.com/LuaJIT/LuaJIT.git
++  GIT_TAG        a91d0d9d3bba1a936669cfac3244509a0f2ac0e3 # 2.1.0-beta3+ where mac builds without extra setup
++)
++FetchContent_MakeAvailable(luajit21)
++
++set(LUA_SRC_FOLDER "${luajit21_SOURCE_DIR}")
++set(LUA_BIN_FOLDER "${luajit21_BINARY_DIR}")
++# note that the / at the end means that we copy folder contents, not the folder itself
++file(COPY ${LUA_SRC_FOLDER}/ DESTINATION ${LUA_BIN_FOLDER})
++
++if (WIN32)
++  if (LUA_STATIC)
++    # build luajit static
++    add_custom_command(
++      OUTPUT ${LUA_BIN_FOLDER}/src/lua51.lib ${LUA_BIN_FOLDER}/src/luajit.exe
++      WORKING_DIRECTORY ${LUA_BIN_FOLDER}/src
++      COMMAND call msvcbuild.bat static
++    )
++
++    # add it as a library target
++    add_custom_target(luajit_target DEPENDS ${LUA_BIN_FOLDER}/src/lua51.lib)
++    add_library(lualib STATIC IMPORTED GLOBAL)
++    add_dependencies(lualib luajit_target)
++    set_target_properties(lualib
++    PROPERTIES
++    IMPORTED_LOCATION ${LUA_BIN_FOLDER}/src/lua51.lib
++    INTERFACE_INCLUDE_DIRECTORIES "${LUA_SRC_FOLDER}/src"
++    )
++
++    # install generated files
++    install(FILES ${LUA_BIN_FOLDER}/src/lua51.lib ${LUA_BIN_FOLDER}/src/luajit.exe DESTINATION "${CMAKE_INSTALL_PREFIX}")
++    install(DIRECTORY ${LUA_BIN_FOLDER}/src/jit DESTINATION "${CMAKE_INSTALL_PREFIX}/lua")
++  else()
++    # build luajit dll
++    add_custom_command(
++      OUTPUT ${LUA_BIN_FOLDER}/src/lua51.dll ${LUA_BIN_FOLDER}/src/lua51.lib ${LUA_BIN_FOLDER}/src/luajit.exe
++      WORKING_DIRECTORY ${LUA_BIN_FOLDER}/src
++      # COMMAND echo luajit built on platform $(Platform)
++      # COMMAND cd $(VSInstallDir)/VC
++      # COMMAND if \"$(Platform)\"==\"Win32\" echo \"luajit building $(Platform)\" & call $(VSInstallDir)/VC/vcvarsall.bat $(Platform) & call msvcbuild.bat
++      # COMMAND if \"$(Platform)\"==\"Win32\" echo \"luajit building 64bit\" & call $(VSInstallDir)/VC/vcvarsall.bat x64
++      # COMMAND if \"$(Platform)\"==\"Win64\" echo luajit building 64bit
++      # COMMAND if \"$(Platform)\"==\"Win64\" call $(VSInstallDir)/VC/vcvarsall.bat x64
++      # COMMAND cd ${LUA_BIN_FOLDER}/src
++      COMMAND call msvcbuild.bat
++      # COMMAND ${CMAKE_COMMAND} -E copy ${LUA_BIN_FOLDER}/src/lua51.dll ${CMAKE_BINARY_DIR}/$(ConfigurationName)/
++      # COMMAND ${CMAKE_COMMAND} -E copy ${LUA_BIN_FOLDER}/src/lua51.lib ${CMAKE_BINARY_DIR}/$(ConfigurationName)/
++      # COMMAND ${CMAKE_COMMAND} -E copy ${LUA_BIN_FOLDER}/src/luajit.exe ${CMAKE_BINARY_DIR}/$(ConfigurationName)/
++    )
++
++    # add it as a library target
++    add_custom_target(luajit_target DEPENDS ${LUA_BIN_FOLDER}/src/lua51.lib)
++    add_library(lualib SHARED IMPORTED GLOBAL)
++    add_dependencies(lualib luajit_target)
++    set_target_properties(lualib
++    PROPERTIES
++    IMPORTED_LOCATION ${LUA_BIN_FOLDER}/src/lua51.dll
++    IMPORTED_IMPLIB ${LUA_BIN_FOLDER}/src/lua51.lib
++    INTERFACE_INCLUDE_DIRECTORIES "${LUA_SRC_FOLDER}/src"
++    )
++
++    # install generated files
++    install(FILES ${LUA_BIN_FOLDER}/src/lua51.dll ${LUA_BIN_FOLDER}/src/lua51.lib ${LUA_BIN_FOLDER}/src/luajit.exe DESTINATION "${CMAKE_INSTALL_PREFIX}")
++    install(DIRECTORY ${LUA_BIN_FOLDER}/src/jit DESTINATION "${CMAKE_INSTALL_PREFIX}/lua")
++  endif()
++endif()
++
++if (UNIX OR APPLE)
++  #option(LUA_USR "Use /usr/local/ as lua library location" OFF)
++  #if (LUA_USR)
++  #  set(LUA_INSTALL_PATH "/usr/local")
++  #else()
++    set(LUA_INSTALL_PATH "${CMAKE_CURRENT_BINARY_DIR}/BIN")
++  #endif()
++
++  if (LUA_STATIC)
++    set(LUAJIT_LIB_PATH "${LUA_INSTALL_PATH}/lib/libluajit-5.1.a")
++  else()
++    if (APPLE)
++      set(LUAJIT_LIB_PATH "${LUA_INSTALL_PATH}/lib/libluajit-5.1.2.1.0.dylib")
++    elseif(UNIX)
++      set(LUAJIT_LIB_PATH "${LUA_INSTALL_PATH}/lib/libluajit-5.1.so.2.1.0")
++    endif()
++  endif()
++
++  # build luajit
++  # if (LUA_USR)
++  #   add_custom_command(
++  #     OUTPUT ${LUAJIT_LIB_PATH}
++  #     COMMAND $(MAKE) -C ${LUA_BIN_FOLDER}
++  #     COMMAND $(MAKE) -C ${LUA_BIN_FOLDER} install
++  #   )
++  # else ()
++    add_custom_command(
++      OUTPUT ${LUAJIT_LIB_PATH}
++      # COMMAND $(MAKE) -C ${LUA_BIN_FOLDER} PREFIX=${LUA_INSTALL_PATH}
++      COMMAND $(MAKE) -C ${LUA_BIN_FOLDER} install PREFIX=${LUA_INSTALL_PATH}
++    )
++  # endif()
++  add_custom_target(luajit_target DEPENDS ${LUAJIT_LIB_PATH})
++
++  # add it as a library target
++  if (LUA_STATIC)
++      add_library(lualib STATIC IMPORTED GLOBAL)
++      # on static build the libraries are not a part of the luajit archive
++      target_link_libraries(lualib INTERFACE ${CMAKE_DL_LIBS})
++  else()
++      add_library(lualib SHARED IMPORTED GLOBAL)
++  endif()
++  add_dependencies(lualib luajit_target)
++  set_target_properties(lualib
++  PROPERTIES
++  # IMPORTED_LOCATION ${LUAJIT_LIB_PATH} # cmake bullshit. spent days figuring this and turns out set_target_properties does squat shit while set_property works fine.
++  INTERFACE_INCLUDE_DIRECTORIES "${LUA_SRC_FOLDER}/src"
++  )
++  set_property(TARGET lualib PROPERTY IMPORTED_LOCATION ${LUAJIT_LIB_PATH})
++
++  # install generated files
++  install(DIRECTORY ${LUA_INSTALL_PATH}/ DESTINATION ${CMAKE_INSTALL_PREFIX})
++endif()
+diff --git a/src/cmake/showoptions.cmake b/src/cmake/showoptions.cmake
+index 443584127..afb5d3cab 100644
+--- a/src/cmake/showoptions.cmake
++++ b/src/cmake/showoptions.cmake
+@@ -38,6 +38,15 @@ else()
+   message("* Build applications              : No")
+ endif()
+ 
++if(ELUNA)
++  message("* Build Eluna LuaEngine  : Yes (default)")
++  add_definitions(-DELUNA)
++  add_definitions(-DELUNA_AZEROTHCORE)
++  add_definitions(-DELUNA_EXPANSION=2)
++else()
++  message("* Build Eluna LuaEngine  : No")
++endif()
++
+ if (TOOLS_BUILD AND (NOT TOOLS_BUILD STREQUAL "none"))
+   message("* Build tools                     : Yes (${TOOLS_BUILD})")
+   add_definitions(-DNO_CORE_FUNCS)
+diff --git a/src/common/CMakeLists.txt b/src/common/CMakeLists.txt
+index 22c7d5fd7..7e3742e61 100644
+--- a/src/common/CMakeLists.txt
++++ b/src/common/CMakeLists.txt
+@@ -76,6 +76,12 @@ target_link_libraries(common
+     stdfs
+     fmt)
+ 
++if (ELUNA)
++  target_link_libraries(common
++    PUBLIC
++      lualib)
++endif()
++
+ if (BUILD_APPLICATION_WORLDSERVER OR BUILD_TOOLS_MAPS)
+   target_link_libraries(common
+     PUBLIC
+diff --git a/src/server/game/Achievements/AchievementMgr.cpp b/src/server/game/Achievements/AchievementMgr.cpp
+index f96775eb4..91699c82b 100644
+--- a/src/server/game/Achievements/AchievementMgr.cpp
++++ b/src/server/game/Achievements/AchievementMgr.cpp
+@@ -45,6 +45,9 @@
+ #include "World.h"
+ #include "WorldPacket.h"
+ #include "WorldSessionMgr.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ bool AchievementCriteriaData::IsValid(AchievementCriteriaEntry const* criteria)
+ {
+@@ -2318,6 +2321,11 @@ void AchievementMgr::CompletedAchievement(AchievementEntry const* achievement)
+     UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_COMPLETE_ACHIEVEMENT, achievement->ID);
+     UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EARN_ACHIEVEMENT_POINTS, achievement->points);
+ 
++#ifdef ELUNA
++    if (Eluna* e = GetPlayer()->GetEluna())
++        e->OnAchievementComplete(GetPlayer(), achievement->ID);
++#endif
++
+     // reward items and titles if any
+     AchievementReward const* reward = sAchievementMgr->GetAchievementReward(achievement);
+ 
+diff --git a/src/server/game/Battlegrounds/Battleground.cpp b/src/server/game/Battlegrounds/Battleground.cpp
+index 7ddd4e87e..37d443cc3 100644
+--- a/src/server/game/Battlegrounds/Battleground.cpp
++++ b/src/server/game/Battlegrounds/Battleground.cpp
+@@ -47,6 +47,9 @@
+ #include "World.h"
+ #include "WorldPacket.h"
+ #include "WorldStatePackets.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ namespace Acore
+ {
+@@ -213,6 +216,12 @@ Battleground::Battleground()
+ 
+ Battleground::~Battleground()
+ {
++#ifdef ELUNA
++    if(m_Map)
++        if (Eluna* e = m_Map->GetEluna())
++            e->OnBGDestroy(this, GetBgTypeID(), GetInstanceID());
++#endif
++
+     LOG_DEBUG("bg.battleground", "> Remove Battleground {} {} {}", GetName(), GetBgTypeID(), GetInstanceID());
+ 
+     _reviveEvents.KillAllEvents(false);
+@@ -590,6 +599,11 @@ inline void Battleground::_ProcessJoin(uint32 diff)
+         // Start the battle
+         StartingEventOpenDoors();
+ 
++#ifdef ELUNA
++        if (Eluna* e = GetBgMap()->GetEluna())
++            e->OnBGStart(this, GetBgTypeID(), GetInstanceID());
++#endif
++
+         if (StartMessageIds[BG_STARTING_EVENT_FOURTH])
+             SendBroadcastText(StartMessageIds[BG_STARTING_EVENT_FOURTH], CHAT_MSG_BG_SYSTEM_NEUTRAL);
+ 
+@@ -968,6 +982,11 @@ void Battleground::EndBattleground(PvPTeamId winnerTeamId)
+ 
+         player->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_COMPLETE_BATTLEGROUND, player->GetMapId());
+     }
++#ifdef ELUNA
++    //the type of the winner,change Team to BattlegroundTeamId,it could be better.
++    if (Eluna* e = GetBgMap()->GetEluna())
++        e->OnBGEnd(this, GetBgTypeID(), GetInstanceID(), GetTeamId(winnerTeamId) == TEAM_ALLIANCE ? ALLIANCE : HORDE);
++#endif
+ 
+     if (IsEventActive(EVENT_SPIRIT_OF_COMPETITION) && isBattleground())
+         SpiritOfCompetitionEvent(winnerTeamId);
+diff --git a/src/server/game/CMakeLists.txt b/src/server/game/CMakeLists.txt
+index 3ac1d0d35..1215a44eb 100644
+--- a/src/server/game/CMakeLists.txt
++++ b/src/server/game/CMakeLists.txt
+@@ -10,13 +10,32 @@
+ # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ #
+ 
++# Initialize a variable to hold Eluna directories to exclude
++set(ELUNA_EXCLUDE_DIRS)
++
++# Exclude files in the LuaEngine directory for Mangos, CMangos and VMangos
++# or the entire directory if Eluna is disabled
++if(ELUNA)
++  list(APPEND ELUNA_EXCLUDE_DIRS
++    ${CMAKE_CURRENT_SOURCE_DIR}/LuaEngine/methods/Mangos
++    ${CMAKE_CURRENT_SOURCE_DIR}/LuaEngine/methods/CMangos
++    ${CMAKE_CURRENT_SOURCE_DIR}/LuaEngine/methods/VMangos
++    ${CMAKE_CURRENT_SOURCE_DIR}/LuaEngine/methods/TrinityCore
++    )
++else()
++  list(APPEND ELUNA_EXCLUDE_DIRS
++    ${CMAKE_CURRENT_SOURCE_DIR}/LuaEngine
++    )
++endif()
++
+ CU_RUN_HOOK(BEFORE_GAME_LIBRARY)
+ 
+ CollectSourceFiles(
+   ${CMAKE_CURRENT_SOURCE_DIR}
+   PRIVATE_SOURCES
+   # Exclude
+-  ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders)
++  ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders
++  ${ELUNA_EXCLUDE_DIRS})
+ 
+ if (USE_COREPCH)
+   set(PRIVATE_PCH_HEADER PrecompiledHeaders/gamePCH.h)
+@@ -31,7 +50,8 @@ CollectIncludeDirectories(
+   ${CMAKE_CURRENT_SOURCE_DIR}
+   PUBLIC_INCLUDES
+   # Exclude
+-  ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders)
++  ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders
++  ${ELUNA_EXCLUDE_DIRS})
+ 
+ target_include_directories(game-interface
+   INTERFACE
+@@ -66,4 +86,30 @@ if (USE_COREPCH)
+   add_cxx_pch(game ${PRIVATE_PCH_HEADER})
+ endif ()
+ 
++if(ELUNA)
++  if(WIN32)
++    if (MSVC)
++      add_custom_command(TARGET game
++        POST_BUILD
++        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/bin/$(ConfigurationName)/lua_scripts/extensions/
++        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/LuaEngine/extensions ${CMAKE_BINARY_DIR}/bin/$(ConfigurationName)/lua_scripts/extensions/
++      )
++    elseif(MINGW)
++      add_custom_command(TARGET game
++        POST_BUILD
++        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/bin/lua_scripts/extensions/
++        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/LuaEngine/extensions ${CMAKE_BINARY_DIR}/bin/lua_scripts/extensions/
++      )
++    endif()
++  endif()
++
++  if(UNIX)
++    install(DIRECTORY LuaEngine/extensions DESTINATION bin/lua_scripts/)
++  elseif(WIN32)
++    install(DIRECTORY LuaEngine/extensions DESTINATION "${CMAKE_INSTALL_PREFIX}/lua_scripts/")
++  endif()
++
++  add_subdirectory(LuaEngine)
++endif()
++
+ CU_RUN_HOOK(AFTER_GAME_LIBRARY)
+diff --git a/src/server/game/Chat/ChatCommands/ChatCommand.cpp b/src/server/game/Chat/ChatCommands/ChatCommand.cpp
+index c15e4d9a8..47ca09688 100644
+--- a/src/server/game/Chat/ChatCommands/ChatCommand.cpp
++++ b/src/server/game/Chat/ChatCommands/ChatCommand.cpp
+@@ -26,6 +26,9 @@
+ #include "StringFormat.h"
+ #include "Tokenize.h"
+ #include "WorldSession.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ using ChatSubCommandMap = std::map<std::string_view, Acore::Impl::ChatCommands::ChatCommandNode, StringCompareLessI_T>;
+ 
+@@ -336,6 +339,11 @@ namespace Acore::Impl::ChatCommands
+         }
+         else if (!handler.HasSentErrorMessage()) /* invocation failed, we should show usage */
+         {
++#ifdef ELUNA
++            if (Eluna* e = sWorld->GetEluna())
++                if (!e->OnCommand(handler.IsConsole() ? nullptr : handler.GetSession()->GetPlayer(), std::string(cmdStr).c_str()))
++                    return true;
++#endif
+             cmd->SendCommandHelp(handler);
+             handler.SetSentErrorMessage(true);
+         }
+@@ -343,6 +351,12 @@ namespace Acore::Impl::ChatCommands
+         return true;
+     }
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        if (!e->OnCommand(handler.IsConsole() ? nullptr : handler.GetSession()->GetPlayer(), std::string(cmdStr).c_str()))
++            return true;
++#endif
++
+     return false;
+ }
+ 
+diff --git a/src/server/game/Entities/Creature/Creature.cpp b/src/server/game/Entities/Creature/Creature.cpp
+index 8ef6206bb..320fe2db0 100644
+--- a/src/server/game/Entities/Creature/Creature.cpp
++++ b/src/server/game/Entities/Creature/Creature.cpp
+@@ -48,6 +48,9 @@
+ #include "World.h"
+ #include "WorldPacket.h"
+ #include "WorldSessionMgr.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ /// @todo: this import is not necessary for compilation and marked as unused by the IDE
+ //  however, for some reasons removing it would cause a damn linking issue
+@@ -339,6 +342,11 @@ void Creature::AddToWorld()
+             GetZoneScript()->OnCreatureCreate(this);
+         }
+ 
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++            e->OnAddToWorld(this);
++#endif
++
+         loot.sourceWorldObjectGUID = GetGUID();
+ 
+         sScriptMgr->OnCreatureAddWorld(this);
+@@ -351,6 +359,11 @@ void Creature::RemoveFromWorld()
+     {
+         sScriptMgr->OnCreatureRemoveWorld(this);
+ 
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++            e->OnRemoveFromWorld(this);
++#endif
++
+         if (GetZoneScript())
+             GetZoneScript()->OnCreatureRemove(this);
+ 
+diff --git a/src/server/game/Entities/GameObject/GameObject.cpp b/src/server/game/Entities/GameObject/GameObject.cpp
+index 1fa5a4177..27ac808f3 100644
+--- a/src/server/game/Entities/GameObject/GameObject.cpp
++++ b/src/server/game/Entities/GameObject/GameObject.cpp
+@@ -34,6 +34,9 @@
+ #include "Transport.h"
+ #include "UpdateFieldFlags.h"
+ #include "World.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ #include <G3D/Box.h>
+ #include <G3D/CoordinateFrame.h>
+ #include <G3D/Quat.h>
+@@ -159,6 +162,15 @@ void GameObject::AddToWorld()
+ 
+         WorldObject::AddToWorld();
+ 
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++        {
++            // one of these should really be deprecated, they serve the exact same purpose
++            e->OnAddToWorld(this);
++            e->OnSpawn(this);
++        }
++#endif
++
+         loot.sourceWorldObjectGUID = GetGUID();
+ 
+         sScriptMgr->OnGameObjectAddWorld(this);
+@@ -170,6 +182,10 @@ void GameObject::RemoveFromWorld()
+     ///- Remove the gameobject from the accessor
+     if (IsInWorld())
+     {
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++            e->OnRemoveFromWorld(this);
++#endif
+         sScriptMgr->OnGameObjectRemoveWorld(this);
+ 
+         if (m_zoneScript)
+@@ -446,6 +462,10 @@ bool GameObject::Create(ObjectGuid::LowType guidlow, uint32 name_id, Map* map, u
+ 
+ void GameObject::Update(uint32 diff)
+ {
++#ifdef ELUNA
++    if (Eluna* e = GetEluna())
++        e->UpdateAI(this, diff);
++#endif
+     WorldObject::Update(diff);
+ 
+     if (AI())
+@@ -1477,6 +1497,11 @@ void GameObject::Use(Unit* user)
+         if (sScriptMgr->OnGossipHello(playerUser, this))
+             return;
+ 
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++            if (e->OnGossipHello(playerUser, this))
++                return;
++#endif
+         if (AI()->GossipHello(playerUser, false))
+             return;
+     }
+@@ -2341,6 +2366,10 @@ void GameObject::SetDestructibleState(GameObjectDestructibleState state, Player*
+             break;
+         case GO_DESTRUCTIBLE_DAMAGED:
+             {
++#ifdef ELUNA
++                if (Eluna* e = GetEluna())
++                    e->OnDamaged(this, eventInvoker);
++#endif
+                 EventInform(m_goInfo->building.damagedEvent);
+ 
+                 sScriptMgr->OnGameObjectDamaged(this, eventInvoker);
+@@ -2371,6 +2400,10 @@ void GameObject::SetDestructibleState(GameObjectDestructibleState state, Player*
+             }
+         case GO_DESTRUCTIBLE_DESTROYED:
+             {
++#ifdef ELUNA
++                if (Eluna* e = GetEluna())
++                    e->OnDestroyed(this, eventInvoker);
++#endif
+                 sScriptMgr->OnGameObjectDestroyed(this, eventInvoker);
+ 
+                 EventInform(m_goInfo->building.destroyedEvent);
+@@ -2433,6 +2466,10 @@ void GameObject::SetLootState(LootState state, Unit* unit)
+     else
+         _lootStateUnitGUID.Clear();
+ 
++#ifdef ELUNA
++    if (Eluna* e = GetEluna())
++        e->OnLootStateChanged(this, state);
++#endif
+     AI()->OnStateChanged(state, unit);
+     sScriptMgr->OnGameObjectLootStateChanged(this, state, unit);
+ 
+@@ -2462,7 +2499,10 @@ void GameObject::SetLootState(LootState state, Unit* unit)
+ void GameObject::SetGoState(GOState state)
+ {
+     SetByteValue(GAMEOBJECT_BYTES_1, 0, state);
+-
++#ifdef ELUNA
++    if (Eluna* e = GetEluna())
++        e->OnGameObjectStateChanged(this, state);
++#endif
+     sScriptMgr->OnGameObjectStateChanged(this, state);
+ 
+     if (m_model)
+diff --git a/src/server/game/Entities/Object/Object.cpp b/src/server/game/Entities/Object/Object.cpp
+index 3081013be..4f4878b1a 100644
+--- a/src/server/game/Entities/Object/Object.cpp
++++ b/src/server/game/Entities/Object/Object.cpp
+@@ -51,6 +51,9 @@
+ #include "Vehicle.h"
+ #include "World.h"
+ #include "WorldPacket.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ /// @todo: this import is not necessary for compilation and marked as unused by the IDE
+ //  however, for some reasons removing it would cause a damn linking issue
+@@ -2095,7 +2098,23 @@ void WorldObject::SetMap(Map* map)
+     m_currMap = map;
+     m_mapId = map->GetId();
+     m_InstanceId = map->GetInstanceId();
++#ifdef ELUNA
++    // always reset Map events, then recreate the Map events procesor if Eluna is enabled for the map
++    auto& events = GetElunaEvents(m_mapId);
++    if (events)
++        events.reset();
+ 
++    if (Eluna* e = map->GetEluna())
++        events = std::make_unique<ElunaEventProcessor>(e, this);
++
++    // create the World events processor
++    if (Eluna* e = sWorld->GetEluna())
++    {
++        auto& events = GetElunaEvents(-1);
++        if (!events)
++            events = std::make_unique<ElunaEventProcessor>(e, this);
++    }
++#endif
+     sScriptMgr->OnWorldObjectSetMap(this, map);
+ }
+ 
+@@ -2458,6 +2477,16 @@ std::string WorldObject::GetDebugInfo() const
+     return sstr.str();
+ }
+ 
++#ifdef ELUNA
++Eluna* WorldObject::GetEluna() const
++{
++    if (const Map* map = FindMap())
++        return map->GetEluna();
++
++    return nullptr;
++}
++#endif
++
+ void WorldObject::GetGameObjectListWithEntryInGrid(std::list<GameObject*>& gameobjectList, uint32 entry, float maxSearchRange) const
+ {
+     Acore::AllGameObjectsWithEntryInRange check(this, entry, maxSearchRange);
+diff --git a/src/server/game/Entities/Object/Object.h b/src/server/game/Entities/Object/Object.h
+index 1a2cdf384..693b8debc 100644
+--- a/src/server/game/Entities/Object/Object.h
++++ b/src/server/game/Entities/Object/Object.h
+@@ -38,11 +38,13 @@
+ #include <set>
+ #include <sstream>
+ #include <string>
++#ifdef ELUNA
++#include "ElunaEventMgr.h"
++#include "LuaValue.h"
++#endif
+ 
+ #include "UpdateFields.h"
+ 
+-class ElunaEventProcessor;
+-
+ enum TempSummonType
+ {
+     TEMPSUMMON_TIMED_OR_DEAD_DESPAWN       = 1,             // despawns after a specified time OR when the creature disappears
+@@ -93,6 +95,10 @@ class Unit;
+ class Transport;
+ class StaticTransport;
+ class MotionTransport;
++#ifdef ELUNA
++class ElunaEventProcessor;
++class Eluna;
++#endif
+ 
+ struct PositionFullTerrainStatus;
+ 
+@@ -665,6 +671,17 @@ public:
+ 
+     uint32  LastUsedScriptID;
+ 
++#ifdef ELUNA
++    std::unique_ptr <ElunaEventProcessor> elunaMapEvents;
++    std::unique_ptr <ElunaEventProcessor> elunaWorldEvents;
++
++    Eluna* GetEluna() const;
++
++    std::unique_ptr<ElunaEventProcessor>& GetElunaEvents(int32 mapId) { return (mapId == -1) ? elunaWorldEvents : elunaMapEvents; }
++
++    LuaVal lua_data = LuaVal({});
++#endif
++
+     // Transports
+     [[nodiscard]] Transport* GetTransport() const { return m_transport; }
+     [[nodiscard]] float GetTransOffsetX() const { return m_movementInfo.transport.pos.GetPositionX(); }
+@@ -713,7 +730,6 @@ public:
+     ObjectVisibilityContainer const& GetObjectVisibilityContainer() const { return _objectVisibilityContainer; }
+ 
+     // Event handler
+-    ElunaEventProcessor* elunaEvents;
+     EventProcessor m_Events;
+ 
+ protected:
+diff --git a/src/server/game/Entities/Player/Player.cpp b/src/server/game/Entities/Player/Player.cpp
+index 6d5e8b24c..d5221e8d3 100644
+--- a/src/server/game/Entities/Player/Player.cpp
++++ b/src/server/game/Entities/Player/Player.cpp
+@@ -90,6 +90,9 @@
+ #include "WorldStateDefines.h"
+ #include "WorldStatePackets.h"
+ #include <cmath>
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ /// @todo: this import is not necessary for compilation and marked as unused by the IDE
+ //  however, for some reasons removing it would cause a damn linking issue
+@@ -809,6 +812,10 @@ uint32 Player::EnvironmentalDamage(EnviromentalDamage type, uint32 damage)
+         }
+ 
+         UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_DEATHS_FROM, 1, type);
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++            e->OnPlayerKilledByEnvironment(this, type);
++#endif
+     }
+ 
+     return final_damage;
+@@ -3332,6 +3339,11 @@ void Player::learnSpell(uint32 spellId, bool temporary /*= false*/, bool learnFr
+         // pussywizard: a system message "you have learnt spell X (rank Y)"
+         if (IsInWorld())
+             SendLearnPacket(spellId, true);
++
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++            e->OnLearnSpell(this, spellId);
++#endif
+     }
+ 
+     // pussywizard: rank stuff at the end!
+@@ -4552,6 +4564,10 @@ void Player::ResurrectPlayer(float restore_percent, bool applySickness)
+ 
+     sScriptMgr->OnPlayerResurrect(this, restore_percent, applySickness);
+ 
++#ifdef ELUNA
++    if (Eluna* e = GetEluna())
++        e->OnResurrect(this);
++#endif
+     if (!applySickness)
+     {
+         return;
+@@ -5818,6 +5834,10 @@ void Player::CheckAreaExploreAndOutdoor()
+ 
+     if (!(currFields & val))
+     {
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++            e->OnDiscoverArea(this, GetAreaId());
++#endif
+         SetUInt32Value(PLAYER_EXPLORED_ZONES_1 + offset, (uint32)(currFields | val));
+ 
+         UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EXPLORE_AREA, areaId);
+@@ -13573,6 +13593,10 @@ LootItem* Player::StoreLootItem(uint8 lootSlot, Loot* loot, InventoryResult& msg
+             sLootItemStorage->RemoveStoredLootItem(loot->containerGUID, item->itemid, item->count, loot, item->itemIndex);
+ 
+         sScriptMgr->OnPlayerLootItem(this, newitem, item->count, this->GetLootGUID());
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++            e->OnLootItem(this, newitem, item->count, this->GetLootGUID());
++#endif
+     }
+     else
+     {
+@@ -14040,6 +14064,11 @@ void Player::LearnTalent(uint32 talentId, uint32 talentRank, bool command /*= fa
+     }
+ 
+     sScriptMgr->OnPlayerLearnTalents(this, talentId, talentRank, spellId);
++
++#ifdef ELUNA
++    if (Eluna* e = GetEluna())
++        e->OnLearnTalents(this, talentId, talentRank, spellId);
++#endif
+ }
+ 
+ void Player::LearnPetTalent(ObjectGuid petGuid, uint32 talentId, uint32 talentRank)
+diff --git a/src/server/game/Entities/Player/PlayerQuest.cpp b/src/server/game/Entities/Player/PlayerQuest.cpp
+index 9f663ff2f..fb22a372c 100644
+--- a/src/server/game/Entities/Player/PlayerQuest.cpp
++++ b/src/server/game/Entities/Player/PlayerQuest.cpp
+@@ -31,6 +31,9 @@
+ #include "SpellAuraEffects.h"
+ #include "SpellMgr.h"
+ #include "WorldSession.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ /*********************************************************/
+ /***                    QUEST SYSTEM                   ***/
+@@ -432,6 +435,10 @@ void Player::AddQuestAndCheckCompletion(Quest const* quest, Object* questGiver)
+     {
+         case TYPEID_UNIT:
+             sScriptMgr->OnQuestAccept(this, questGiver->ToCreature(), quest);
++#ifdef ELUNA
++            if (Eluna* e = GetEluna())
++                e->OnQuestAccept(this, questGiver->ToCreature(), quest);
++#endif
+             questGiver->ToCreature()->AI()->sQuestAccept(this, quest);
+             break;
+         case TYPEID_ITEM:
+@@ -458,6 +465,10 @@ void Player::AddQuestAndCheckCompletion(Quest const* quest, Object* questGiver)
+         }
+         case TYPEID_GAMEOBJECT:
+             sScriptMgr->OnQuestAccept(this, questGiver->ToGameObject(), quest);
++#ifdef ELUNA
++            if (Eluna* e = GetEluna())
++                e->OnQuestAccept(this, questGiver->ToGameObject(), quest);
++#endif
+             questGiver->ToGameObject()->AI()->QuestAccept(this, quest);
+             break;
+         default:
+@@ -1603,6 +1614,10 @@ QuestGiverStatus Player::GetQuestDialogStatus(Object* questgiver)
+     {
+         case TYPEID_GAMEOBJECT:
+         {
++#ifdef ELUNA
++            if (Eluna* e = GetEluna())
++                e->GetDialogStatus(this, questgiver->ToGameObject());
++#endif
+             QuestGiverStatus questStatus = QuestGiverStatus(sScriptMgr->GetDialogStatus(this, questgiver->ToGameObject()));
+             if (questStatus != DIALOG_STATUS_SCRIPTED_NO_STATUS)
+                 return questStatus;
+@@ -1612,6 +1627,10 @@ QuestGiverStatus Player::GetQuestDialogStatus(Object* questgiver)
+         }
+         case TYPEID_UNIT:
+         {
++#ifdef ELUNA
++            if (Eluna* e = GetEluna())
++                e->GetDialogStatus(this, questgiver->ToCreature());
++#endif
+             QuestGiverStatus questStatus = QuestGiverStatus(sScriptMgr->GetDialogStatus(this, questgiver->ToCreature()));
+             if (questStatus != DIALOG_STATUS_SCRIPTED_NO_STATUS)
+                 return questStatus;
+diff --git a/src/server/game/Entities/Player/PlayerStorage.cpp b/src/server/game/Entities/Player/PlayerStorage.cpp
+index 01595faa5..4e525b05a 100644
+--- a/src/server/game/Entities/Player/PlayerStorage.cpp
++++ b/src/server/game/Entities/Player/PlayerStorage.cpp
+@@ -63,6 +63,9 @@
+ #include "Util.h"
+ #include "World.h"
+ #include "WorldPacket.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ /// @todo: this import is not necessary for compilation and marked as unused by the IDE
+ //  however, for some reasons removing it would cause a damn linking issue
+@@ -2331,6 +2334,15 @@ InventoryResult Player::CanUseItem(ItemTemplate const* proto) const
+         return result;
+     }
+ 
++#ifdef ELUNA
++    if (Eluna* e = GetEluna())
++    {
++        InventoryResult eres = e->OnCanUseItem(this, proto->ItemId);
++        if (eres != EQUIP_ERR_OK)
++            return eres;
++    }
++#endif
++
+     return EQUIP_ERR_OK;
+ }
+ 
+@@ -2567,6 +2579,11 @@ Item* Player::StoreNewItem(ItemPosCountVec const& dest, uint32 item, bool update
+         }
+ 
+         sScriptMgr->OnPlayerStoreNewItem(this, pItem, count);
++
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++            e->OnAdd(this, pItem);
++#endif
+     }
+     return pItem;
+ }
+@@ -2820,6 +2837,14 @@ Item* Player::EquipItem(uint16 pos, Item* pItem, bool update)
+ 
+         ApplyEquipCooldown(pItem2);
+         sScriptMgr->OnPlayerEquip(this, pItem2, bag, slot, update);
++
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++        {
++            e->OnEquip(this, pItem2, bag, slot); // This should be removed in the future
++            e->OnItemEquip(this, pItem2, slot);
++        }
++#endif
+         return pItem2;
+     }
+ 
+@@ -2829,6 +2854,14 @@ Item* Player::EquipItem(uint16 pos, Item* pItem, bool update)
+ 
+     sScriptMgr->OnPlayerEquip(this, pItem, bag, slot, update);
+     UpdateForQuestWorldObjects();
++
++#ifdef ELUNA
++    if (Eluna* e = GetEluna())
++    {
++        e->OnEquip(this, pItem, bag, slot); // This should be removed in the future
++        e->OnItemEquip(this, pItem, slot);
++    }
++#endif
+     return pItem;
+ }
+ 
+@@ -2852,6 +2885,14 @@ void Player::QuickEquipItem(uint16 pos, Item* pItem)
+         UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_EQUIP_EPIC_ITEM, pItem->GetEntry(), slot);
+ 
+         sScriptMgr->OnPlayerEquip(this, pItem, (pos >> 8), slot, true);
++
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++        {
++            e->OnEquip(this, pItem, (pos >> 8), slot); // This should be removed in the future
++            e->OnItemEquip(this, pItem, slot);
++        }
++#endif
+     }
+ }
+ 
+@@ -2925,6 +2966,11 @@ void Player::RemoveItem(uint8 bag, uint8 slot, bool update, bool swap)
+                 _ApplyItemMods(pItem, slot, false);
+             }
+ 
++#ifdef ELUNA
++            if (Eluna* e = GetEluna())
++                e->OnItemUnEquip(this, pItem, slot);
++#endif
++
+             m_items[slot] = nullptr;
+ 
+             // remove item dependent auras and casts (only weapon and armor slots)
+@@ -3094,6 +3140,11 @@ void Player::DestroyItem(uint8 bag, uint8 slot, bool update)
+ 
+                 // equipment visual show
+                 SetVisibleItemSlot(slot, nullptr);
++
++#ifdef ELUNA
++                if (Eluna* e = GetEluna())
++                    e->OnItemUnEquip(this, pItem, slot);
++#endif
+             }
+ 
+             m_items[slot] = nullptr;
+diff --git a/src/server/game/Entities/Player/PlayerUpdates.cpp b/src/server/game/Entities/Player/PlayerUpdates.cpp
+index 8426e4c8c..71a9db111 100644
+--- a/src/server/game/Entities/Player/PlayerUpdates.cpp
++++ b/src/server/game/Entities/Player/PlayerUpdates.cpp
+@@ -40,6 +40,9 @@
+ #include "WeatherMgr.h"
+ #include "WorldState.h"
+ #include "WorldStatePackets.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ /// @todo: this import is not necessary for compilation and marked as unused by the IDE
+ //  however, for some reasons removing it would cause a damn linking issue
+@@ -740,6 +743,10 @@ bool Player::UpdateSkill(uint32 skill_id, uint32 step)
+                                   skill_id);
+ 
+         sScriptMgr->OnPlayerUpdateSkill(this, skill_id, value, max, step, new_value);
++#ifdef ELUNA
++        if (Eluna* e = GetEluna())
++            e->OnSkillChange(this, skill_id, new_value);
++#endif
+         return true;
+     }
+ 
+@@ -1214,6 +1221,9 @@ void Player::UpdateHonorFields()
+ 
+ void Player::UpdateArea(uint32 newArea)
+ {
++#ifdef ELUNA
++    uint32 oldArea = m_areaUpdateId;
++#endif
+     // pussywizard: inform instance, needed for Icecrown Citadel
+     if (InstanceScript* instance = GetInstanceScript())
+         instance->OnPlayerAreaUpdate(this, m_areaUpdateId, newArea);
+@@ -1247,6 +1257,13 @@ void Player::UpdateArea(uint32 newArea)
+         SetRestFlag(REST_FLAG_IN_FACTION_AREA);
+     else
+         RemoveRestFlag(REST_FLAG_IN_FACTION_AREA);
++
++#ifdef ELUNA
++    // We only want the hook to trigger when the old and new area is actually different
++    if (Eluna* e = GetEluna())
++        if(oldArea != newArea)
++            e->OnUpdateArea(this, oldArea, newArea);
++#endif
+ }
+ 
+ void Player::UpdateZone(uint32 newZone, uint32 newArea, bool force)
+diff --git a/src/server/game/Events/GameEventMgr.cpp b/src/server/game/Events/GameEventMgr.cpp
+index 4e98280fc..96ac68c6f 100644
+--- a/src/server/game/Events/GameEventMgr.cpp
++++ b/src/server/game/Events/GameEventMgr.cpp
+@@ -35,6 +35,9 @@
+ #include "WorldState.h"
+ #include "WorldStatePackets.h"
+ #include <time.h>
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ GameEventMgr* GameEventMgr::instance()
+ {
+@@ -150,6 +153,12 @@ bool GameEventMgr::StartEvent(uint16 eventId, bool overwrite)
+                 data.End = data.Start + data.Length;
+         }
+ 
++#ifdef ELUNA
++        if (IsActiveEvent(eventId))
++            if (Eluna* e = sWorld->GetEluna())
++                e->OnGameEventStart(eventId);
++#endif
++
+         if (IsActiveEvent(eventId))
+             sScriptMgr->OnGameEventStart(eventId);
+ 
+@@ -186,6 +195,12 @@ bool GameEventMgr::StartEvent(uint16 eventId, bool overwrite)
+         if (IsActiveEvent(eventId))
+             sScriptMgr->OnGameEventStart(eventId);
+ 
++#ifdef ELUNA
++        if (IsActiveEvent(eventId))
++            if (Eluna* e = sWorld->GetEluna())
++                e->OnGameEventStart(eventId);
++#endif
++
+         return conditions_met;
+     }
+ }
+@@ -232,6 +247,12 @@ void GameEventMgr::StopEvent(uint16 eventId, bool overwrite)
+         }
+     }
+ 
++#ifdef ELUNA
++    if (!IsActiveEvent(eventId))
++        if (Eluna* e = sWorld->GetEluna())
++            e->OnGameEventStop(eventId);
++#endif
++
+     if (!IsActiveEvent(eventId))
+         sScriptMgr->OnGameEventStop(eventId);
+ }
+diff --git a/src/server/game/Groups/Group.cpp b/src/server/game/Groups/Group.cpp
+index 3fede6ffc..b72e8f963 100644
+--- a/src/server/game/Groups/Group.cpp
++++ b/src/server/game/Groups/Group.cpp
+@@ -40,6 +40,9 @@
+ #include "WorldSession.h"
+ #include "ArenaTeam.h"
+ #include "ArenaTeamMgr.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ Roll::Roll(ObjectGuid _guid, LootItem const& li) : itemGUID(_guid), itemid(li.itemid),
+     itemRandomPropId(li.randomPropertyId), itemRandomSuffix(li.randomSuffix), itemCount(li.count),
+@@ -167,6 +170,11 @@ bool Group::Create(Player* leader)
+     else if (!AddMember(leader))
+         return false;
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnCreate(this, m_leaderGuid, m_groupType);
++#endif
++
+     return true;
+ }
+ 
+diff --git a/src/server/game/Handlers/ChatHandler.cpp b/src/server/game/Handlers/ChatHandler.cpp
+index 04337cd9c..b26614503 100644
+--- a/src/server/game/Handlers/ChatHandler.cpp
++++ b/src/server/game/Handlers/ChatHandler.cpp
+@@ -40,6 +40,9 @@
+ #include "World.h"
+ #include "WorldPacket.h"
+ #include "WorldSession.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ inline bool isNasty(uint8 c)
+ {
+@@ -366,11 +369,32 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+                 }
+ 
+                 if (type == CHAT_MSG_SAY)
++                {
++#ifdef ELUNA
++                    if (Eluna* e = sWorld->GetEluna())
++                        if (!e->OnChat(sender, type, lang, msg))
++                            return;
++#endif
+                     sender->Say(msg, Language(lang));
++                }
+                 else if (type == CHAT_MSG_EMOTE)
++                {
++#ifdef ELUNA
++                    if (Eluna* e = sWorld->GetEluna())
++                        if (!e->OnChat(sender, type, LANG_UNIVERSAL, msg))
++                            return;
++#endif
+                     sender->TextEmote(msg);
++                }
+                 else if (type == CHAT_MSG_YELL)
++                {
++#ifdef ELUNA
++                    if (Eluna* e = sWorld->GetEluna())
++                        if (!e->OnChat(sender, type, lang, msg))
++                            return;
++#endif
+                     sender->Yell(msg, Language(lang));
++                }
+             }
+             break;
+         case CHAT_MSG_WHISPER:
+@@ -415,6 +439,12 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+                 if (!senderIsPlayer && !sender->isAcceptWhispers() && !sender->IsInWhisperWhiteList(receiver->GetGUID()))
+                     sender->AddWhisperWhiteList(receiver->GetGUID());
+ 
++#ifdef ELUNA
++                if (Eluna* e = sWorld->GetEluna())
++                    if (!e->OnChat(GetPlayer(), type, lang, msg, receiver))
++                        return;
++#endif
++
+                 GetPlayer()->Whisper(msg, Language(lang), receiver);
+             }
+             break;
+@@ -440,6 +470,11 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+ 
+                 sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, group);
+ 
++#ifdef ELUNA
++                if (Eluna* e = sWorld->GetEluna())
++                    if(!e->OnChat(sender, type, lang, msg, group))
++                        return;
++#endif
+                 WorldPacket data;
+                 ChatHandler::BuildChatPacket(data, ChatMsg(type), Language(lang), sender, nullptr, msg);
+                 group->BroadcastPacket(&data, false, group->GetMemberGroup(GetPlayer()->GetGUID()));
+@@ -458,6 +493,12 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+ 
+                         sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, guild);
+ 
++#ifdef ELUNA
++                        if (Eluna* e = sWorld->GetEluna())
++                            if(!e->OnChat(sender, type, lang, msg, guild))
++                                return;
++#endif
++
+                         guild->BroadcastToGuild(this, false, msg, lang == LANG_ADDON ? LANG_ADDON : LANG_UNIVERSAL);
+                     }
+                 }
+@@ -476,6 +517,12 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+ 
+                         sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, guild);
+ 
++#ifdef ELUNA
++                        if (Eluna* e = sWorld->GetEluna())
++                            if(!e->OnChat(sender, type, lang, msg, guild))
++                                return;
++#endif
++
+                         guild->BroadcastToGuild(this, true, msg, lang == LANG_ADDON ? LANG_ADDON : LANG_UNIVERSAL);
+                     }
+                 }
+@@ -499,6 +546,12 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+ 
+                 sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, group);
+ 
++#ifdef ELUNA
++                if (Eluna* e = sWorld->GetEluna())
++                    if(!e->OnChat(sender, type, lang, msg, group))
++                        return;
++#endif
++
+                 WorldPacket data;
+                 ChatHandler::BuildChatPacket(data, CHAT_MSG_RAID, Language(lang), sender, nullptr, msg);
+                 group->BroadcastPacket(&data, false);
+@@ -522,6 +575,12 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+ 
+                 sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, group);
+ 
++#ifdef ELUNA
++                if (Eluna* e = sWorld->GetEluna())
++                    if(!e->OnChat(sender, type, lang, msg, group))
++                        return;
++#endif
++
+                 WorldPacket data;
+                 ChatHandler::BuildChatPacket(data, CHAT_MSG_RAID_LEADER, Language(lang), sender, nullptr, msg);
+                 group->BroadcastPacket(&data, false);
+@@ -540,6 +599,12 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+ 
+                 sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, group);
+ 
++#ifdef ELUNA
++                if (Eluna* e = sWorld->GetEluna())
++                    if(!e->OnChat(sender, type, lang, msg, group))
++                        return;
++#endif
++
+                 // In battleground, raid warning is sent only to players in battleground - code is ok
+                 WorldPacket data;
+                 ChatHandler::BuildChatPacket(data, CHAT_MSG_RAID_WARNING, Language(lang), sender, nullptr, msg);
+@@ -560,6 +625,12 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+ 
+                 sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, group);
+ 
++#ifdef ELUNA
++                if (Eluna* e = sWorld->GetEluna())
++                    if(!e->OnChat(sender, type, lang, msg, group))
++                        return;
++#endif
++
+                 WorldPacket data;
+                 ChatHandler::BuildChatPacket(data, CHAT_MSG_BATTLEGROUND, Language(lang), sender, nullptr, msg);
+                 group->BroadcastPacket(&data, false);
+@@ -579,6 +650,12 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+ 
+                 sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, group);
+ 
++#ifdef ELUNA
++                if (Eluna* e = sWorld->GetEluna())
++                    if(!e->OnChat(sender, type, lang, msg, group))
++                        return;
++#endif
++
+                 WorldPacket data;
+                 ChatHandler::BuildChatPacket(data, CHAT_MSG_BATTLEGROUND_LEADER, Language(lang), sender, nullptr, msg);
+                 group->BroadcastPacket(&data, false);
+@@ -606,6 +683,12 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+ 
+                         sScriptMgr->OnPlayerChat(sender, type, lang, msg, chn);
+ 
++#ifdef ELUNA
++                        if (Eluna* e = sWorld->GetEluna())
++                            if(!e->OnChat(sender, type, lang, msg, chn))
++                                return;
++#endif
++
+                         chn->Say(sender->GetGUID(), msg.c_str(), lang);
+                     }
+                 }
+@@ -638,6 +721,12 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+                     }
+ 
+                     sScriptMgr->OnPlayerChat(sender, type, lang, msg);
++
++#ifdef ELUNA
++                    if (Eluna* e = sWorld->GetEluna())
++                        if(!e->OnChat(sender, type, lang, msg))
++                            return;
++#endif
+                 }
+                 break;
+             }
+@@ -667,6 +756,12 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recvData)
+ 
+                 sScriptMgr->OnPlayerChat(sender, type, lang, msg);
+ 
++#ifdef ELUNA
++                if (Eluna* e = sWorld->GetEluna())
++                    if(!e->OnChat(sender, type, lang, msg))
++                        return;
++#endif
++
+                 break;
+             }
+         default:
+diff --git a/src/server/game/Handlers/GroupHandler.cpp b/src/server/game/Handlers/GroupHandler.cpp
+index ee4e0676a..1f0ede44c 100644
+--- a/src/server/game/Handlers/GroupHandler.cpp
++++ b/src/server/game/Handlers/GroupHandler.cpp
+@@ -35,6 +35,9 @@
+ #include "World.h"
+ #include "WorldPacket.h"
+ #include "WorldSession.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ class Aura;
+ 
+@@ -247,6 +250,12 @@ void WorldSession::HandleGroupAcceptOpcode(WorldPacket& recvData)
+         return;
+     }
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        if (!e->OnMemberAccept(group, GetPlayer()))
++            return;
++#endif
++
+     Player* leader = ObjectAccessor::FindConnectedPlayer(group->GetLeaderGUID());
+ 
+     // Forming a new group, create it
+diff --git a/src/server/game/Handlers/LootHandler.cpp b/src/server/game/Handlers/LootHandler.cpp
+index f1b00066b..1c6fe9289 100644
+--- a/src/server/game/Handlers/LootHandler.cpp
++++ b/src/server/game/Handlers/LootHandler.cpp
+@@ -29,6 +29,9 @@
+ #include "ScriptMgr.h"
+ #include "WorldPacket.h"
+ #include "WorldSession.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ void WorldSession::HandleAutostoreLootItemOpcode(WorldPacket& recvData)
+ {
+@@ -223,6 +226,11 @@ void WorldSession::HandleLootMoneyOpcode(WorldPacket& /*recvData*/)
+ 
+         sScriptMgr->OnLootMoney(player, loot->gold);
+ 
++#ifdef ELUNA
++        if (Eluna* e = player->GetEluna())
++            e->OnLootMoney(player, loot->gold);
++#endif
++
+         loot->gold = 0;
+ 
+         // Delete the money loot record from the DB
+@@ -507,6 +515,11 @@ void WorldSession::HandleLootMasterGiveOpcode(WorldPacket& recvData)
+     target->SendNewItem(newitem, uint32(item.count), false, false, true);
+     target->UpdateLootAchievements(&item, loot);
+ 
++#ifdef ELUNA
++    if (Eluna* e = target->GetEluna())
++        e->OnLootItem(target, newitem, item.count, lootguid);
++#endif
++
+     // mark as looted
+     item.count = 0;
+     item.is_looted = true;
+diff --git a/src/server/game/Handlers/MailHandler.cpp b/src/server/game/Handlers/MailHandler.cpp
+index 76cb7fc0d..47430f50e 100644
+--- a/src/server/game/Handlers/MailHandler.cpp
++++ b/src/server/game/Handlers/MailHandler.cpp
+@@ -31,6 +31,9 @@
+ #include "ScriptMgr.h"
+ #include "WorldPacket.h"
+ #include "WorldSession.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ #define MAX_INBOX_CLIENT_CAPACITY 50
+ 
+@@ -284,6 +287,17 @@ void WorldSession::HandleSendMail(WorldPacket& recvData)
+         return;
+     }
+ 
++#ifdef ELUNA
++        if (Eluna* e = player->GetEluna())
++        {
++            if (!e->OnSendMail(player, receiverGuid))
++            {
++                player->SendMailResult(0, MAIL_SEND, MAIL_ERR_EQUIP_ERROR);
++                return;
++            }
++        }
++#endif
++
+     player->SendMailResult(0, MAIL_SEND, MAIL_OK);
+ 
+     player->ModifyMoney(-int32(reqmoney));
+diff --git a/src/server/game/Handlers/MiscHandler.cpp b/src/server/game/Handlers/MiscHandler.cpp
+index 942eae9c5..6f4af6929 100644
+--- a/src/server/game/Handlers/MiscHandler.cpp
++++ b/src/server/game/Handlers/MiscHandler.cpp
+@@ -51,6 +51,9 @@
+ #include "WorldPacket.h"
+ #include "WorldSession.h"
+ #include <zlib.h>
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ #include "Corpse.h"
+ 
+@@ -78,6 +81,11 @@ void WorldSession::HandleRepopRequestOpcode(WorldPacket& recv_data)
+         GetPlayer()->KillPlayer();
+     }
+ 
++#ifdef ELUNA
++    if (Eluna* e = GetPlayer()->GetEluna())
++        e->OnRepop(GetPlayer());
++#endif
++
+     //this is spirit release confirm?
+     GetPlayer()->RemovePet(nullptr, PET_SAVE_NOT_IN_SLOT, true);
+     GetPlayer()->BuildPlayerRepop();
+@@ -166,6 +174,10 @@ void WorldSession::HandleGossipSelectOptionOpcode(WorldPacket& recv_data)
+     {
+         if (unit)
+         {
++#ifdef ELUNA
++            if (Eluna* e = GetPlayer()->GetEluna())
++                if (!e->OnGossipSelectCode(_player, unit, _player->PlayerTalkClass->GetGossipOptionSender(gossipListId), _player->PlayerTalkClass->GetGossipOptionAction(gossipListId), code.c_str()))
++#endif
+             unit->AI()->sGossipSelectCode(_player, menuId, gossipListId, code.c_str());
+             if (!sScriptMgr->OnGossipSelectCode(_player, unit, _player->PlayerTalkClass->GetGossipOptionSender(gossipListId), _player->PlayerTalkClass->GetGossipOptionAction(gossipListId), code.c_str()))
+                 _player->OnGossipSelect(unit, gossipListId, menuId);
+@@ -181,6 +193,10 @@ void WorldSession::HandleGossipSelectOptionOpcode(WorldPacket& recv_data)
+         }
+         else
+         {
++#ifdef ELUNA
++            if (Eluna* e = GetPlayer()->GetEluna())
++                if (!e->OnGossipSelectCode(_player, go, _player->PlayerTalkClass->GetGossipOptionSender(gossipListId), _player->PlayerTalkClass->GetGossipOptionAction(gossipListId), code.c_str()))
++#endif
+             sScriptMgr->OnPlayerGossipSelectCode(_player, menuId, _player->PlayerTalkClass->GetGossipOptionSender(gossipListId), _player->PlayerTalkClass->GetGossipOptionAction(gossipListId), code.c_str());
+         }
+     }
+@@ -188,6 +204,10 @@ void WorldSession::HandleGossipSelectOptionOpcode(WorldPacket& recv_data)
+     {
+         if (unit)
+         {
++#ifdef ELUNA
++            if (Eluna* e = GetPlayer()->GetEluna())
++                if (!e->OnGossipSelect(_player, unit, _player->PlayerTalkClass->GetGossipOptionSender(gossipListId), _player->PlayerTalkClass->GetGossipOptionAction(gossipListId)))
++#endif
+             unit->AI()->sGossipSelect(_player, menuId, gossipListId);
+             if (!sScriptMgr->OnGossipSelect(_player, unit, _player->PlayerTalkClass->GetGossipOptionSender(gossipListId), _player->PlayerTalkClass->GetGossipOptionAction(gossipListId)))
+                 _player->OnGossipSelect(unit, gossipListId, menuId);
+@@ -204,6 +224,10 @@ void WorldSession::HandleGossipSelectOptionOpcode(WorldPacket& recv_data)
+         }
+         else
+         {
++#ifdef ELUNA
++            if (Eluna* e = GetPlayer()->GetEluna())
++                if (!e->OnGossipSelect(_player, go, _player->PlayerTalkClass->GetGossipOptionSender(gossipListId), _player->PlayerTalkClass->GetGossipOptionAction(gossipListId)))
++#endif
+             sScriptMgr->OnPlayerGossipSelect(_player, menuId, _player->PlayerTalkClass->GetGossipOptionSender(gossipListId), _player->PlayerTalkClass->GetGossipOptionAction(gossipListId));
+         }
+     }
+diff --git a/src/server/game/Handlers/NPCHandler.cpp b/src/server/game/Handlers/NPCHandler.cpp
+index b969e8105..a17980eaa 100644
+--- a/src/server/game/Handlers/NPCHandler.cpp
++++ b/src/server/game/Handlers/NPCHandler.cpp
+@@ -32,6 +32,9 @@
+ #include "WorldPacket.h"
+ #include "WorldSession.h"
+ #include <cmath>
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ enum StableResultCode
+ {
+@@ -312,6 +315,11 @@ void WorldSession::HandleGossipHelloOpcode(WorldPacket& recvData)
+         }
+     }
+ 
++#ifdef ELUNA
++    if (Eluna* e = GetPlayer()->GetEluna())
++        if (!e->OnGossipHello(_player, unit))
++#endif
++
+     if (!sScriptMgr->OnGossipHello(_player, unit))
+     {
+         //        _player->TalkedToCreature(unit->GetEntry(), unit->GetGUID());
+diff --git a/src/server/game/Handlers/QuestHandler.cpp b/src/server/game/Handlers/QuestHandler.cpp
+index 80063d638..b6ebc95b0 100644
+--- a/src/server/game/Handlers/QuestHandler.cpp
++++ b/src/server/game/Handlers/QuestHandler.cpp
+@@ -31,6 +31,9 @@
+ #include "World.h"
+ #include "WorldPacket.h"
+ #include "WorldSession.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ void WorldSession::HandleQuestgiverStatusQueryOpcode(WorldPacket& recvData)
+ {
+@@ -98,6 +101,12 @@ void WorldSession::HandleQuestgiverHelloOpcode(WorldPacket& recvData)
+         creature->PauseMovement(pause);
+     creature->SetHomePosition(creature->GetPosition());
+ 
++#ifdef ELUNA
++    if (Eluna* e = GetPlayer()->GetEluna())
++        if (e->OnGossipHello(_player, creature))
++            return;
++#endif
++
+     if (sScriptMgr->OnGossipHello(_player, creature))
+         return;
+ 
+@@ -316,6 +325,10 @@ void WorldSession::HandleQuestgiverChooseRewardOpcode(WorldPacket& recvData)
+                                 }
+                             }
+ 
++#ifdef ELUNA
++                            if (Eluna* e = GetPlayer()->GetEluna())
++                                e->OnQuestReward(_player, questgiver, quest, reward);
++#endif
+                             questgiver->AI()->sQuestReward(_player, quest, reward);
+                         }
+                         break;
+@@ -335,7 +348,10 @@ void WorldSession::HandleQuestgiverChooseRewardOpcode(WorldPacket& recvData)
+                                     _player->PlayerTalkClass->SendQuestGiverQuestDetails(nextQuest, guid, true);
+                                 }
+                             }
+-
++#ifdef ELUNA
++                            if (Eluna* e = GetPlayer()->GetEluna())
++                                e->OnQuestReward(_player, questGiver, quest, reward);
++#endif
+                             questGiver->AI()->QuestReward(_player, quest, reward);
+                         }
+                         break;
+@@ -424,6 +440,11 @@ void WorldSession::HandleQuestLogRemoveQuest(WorldPacket& recvData)
+             _player->RemoveActiveQuest(questId);
+             _player->RemoveTimedAchievement(ACHIEVEMENT_TIMED_TYPE_QUEST, questId);
+ 
++#ifdef ELUNA
++            if (Eluna* e = GetPlayer()->GetEluna())
++                e->OnQuestAbandon(_player, questId);
++#endif
++
+             sScriptMgr->OnPlayerQuestAbandon(_player, questId);
+ 
+             LOG_DEBUG("network.opcode", "Player {} abandoned quest {}", _player->GetGUID().ToString(), questId);
+diff --git a/src/server/game/Handlers/SpellHandler.cpp b/src/server/game/Handlers/SpellHandler.cpp
+index 7d6b5bd2e..5bd9878c4 100644
+--- a/src/server/game/Handlers/SpellHandler.cpp
++++ b/src/server/game/Handlers/SpellHandler.cpp
+@@ -31,6 +31,9 @@
+ #include "Vehicle.h"
+ #include "WorldPacket.h"
+ #include "WorldSession.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ void WorldSession::HandleClientCastFlags(WorldPacket& recvPacket, uint8 castFlags, SpellCastTargets& targets)
+ {
+@@ -367,6 +370,12 @@ void WorldSession::HandleGameobjectReportUse(WorldPacket& recvPacket)
+     if (!go->IsWithinDistInMap(_player, INTERACTION_DISTANCE))
+         return;
+ 
++#ifdef ELUNA
++    if (Eluna* e = GetPlayer()->GetEluna())
++        if (e->OnGameObjectUse(_player, go))
++            return;
++#endif
++
+     if (go->AI()->GossipHello(_player, true))
+         return;
+ 
+diff --git a/src/server/game/Handlers/TradeHandler.cpp b/src/server/game/Handlers/TradeHandler.cpp
+index ce316965e..53c00d122 100644
+--- a/src/server/game/Handlers/TradeHandler.cpp
++++ b/src/server/game/Handlers/TradeHandler.cpp
+@@ -29,6 +29,9 @@
+ #include "World.h"
+ #include "WorldPacket.h"
+ #include "WorldSession.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ void WorldSession::SendTradeStatus(TradeStatus status)
+ {
+@@ -325,6 +328,17 @@ void WorldSession::HandleAcceptTradeOpcode(WorldPacket& /*recvPacket*/)
+         }
+     }
+ 
++#ifdef ELUNA
++    if (Eluna* e = _player->GetEluna())
++    {
++        if (!e->OnTradeAccept(_player, trader))
++        {
++            SendTradeStatus(TRADE_STATUS_TRADE_CANCELED);
++            return;
++        }
++    }
++#endif
++
+     if (his_trade->IsAccepted())
+     {
+         setAcceptTradeMode(my_trade, his_trade, myItems, hisItems);
+@@ -636,6 +650,17 @@ void WorldSession::HandleInitiateTradeOpcode(WorldPacket& recvPacket)
+         return;
+     }
+ 
++#ifdef ELUNA
++    if (Eluna* e = GetPlayer()->GetEluna())
++    {
++        if (!e->OnTradeInit(GetPlayer(), pOther))
++        {
++            SendTradeStatus(TRADE_STATUS_BUSY);
++            return;
++        }
++    }
++#endif
++
+     if (!sScriptMgr->OnPlayerCanInitTrade(_player, pOther))
+         return;
+ 
+diff --git a/src/server/game/Maps/Map.cpp b/src/server/game/Maps/Map.cpp
+index 9ad4cfb4e..dd779d1d6 100644
+--- a/src/server/game/Maps/Map.cpp
++++ b/src/server/game/Maps/Map.cpp
+@@ -43,6 +43,10 @@
+ #include "Vehicle.h"
+ #include "VMapMgr2.h"
+ #include "Weather.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#include "ElunaConfig.h"
++#endif
+ 
+ #define MAP_INVALID_ZONE        0xFFFFFFFF
+ 
+@@ -67,7 +71,14 @@ Map::Map(uint32 id, uint32 InstanceId, uint8 SpawnMode, Map* _parent) :
+     _transportsUpdateIter(_transports.end()), i_scriptLock(false), _defaultLight(GetDefaultMapLight(id))
+ {
+     m_parentMap = (_parent ? _parent : this);
+-
++#ifdef ELUNA
++    // lua state begins uninitialized
++    eluna = nullptr;
++
++    if (sElunaConfig->IsElunaEnabled() && sElunaConfig->ShouldMapLoadEluna(id))
++        if (!IsParentMap() || (IsParentMap() && !Instanceable()))
++            eluna = std::make_unique<Eluna>(this);
++#endif
+     _zonePlayerCountMap.clear();
+     _updatableObjectListRecheckTimer.SetInterval(UPDATABLE_OBJECT_LIST_RECHECK_TIMER);
+ 
+@@ -1696,6 +1707,16 @@ void Map::AddObjectToRemoveList(WorldObject* obj)
+ {
+     ASSERT(obj->GetMapId() == GetId() && obj->GetInstanceId() == GetInstanceId());
+ 
++#ifdef ELUNA
++    if (Eluna* e = GetEluna())
++    {
++        if (Creature* creature = obj->ToCreature())
++            e->OnRemove(creature);
++        else if (GameObject* gameobject = obj->ToGameObject())
++            e->OnRemove(gameobject);
++    }
++#endif
++
+     obj->CleanupsBeforeDelete(false);                            // remove or simplify at least cross referenced links
+ 
+     i_objectsToRemove.insert(obj);
+diff --git a/src/server/game/Maps/Map.h b/src/server/game/Maps/Map.h
+index f43111633..03092fc66 100644
+--- a/src/server/game/Maps/Map.h
++++ b/src/server/game/Maps/Map.h
+@@ -40,6 +40,9 @@
+ #include <list>
+ #include <memory>
+ #include <shared_mutex>
++#ifdef ELUNA
++#include "LuaValue.h"
++#endif
+ 
+ class Unit;
+ class WorldPacket;
+@@ -62,6 +65,9 @@ class Transport;
+ class StaticTransport;
+ class MotionTransport;
+ class PathGenerator;
++#ifdef ELUNA
++class Eluna;
++#endif
+ 
+ enum WeatherState : uint32;
+ 
+@@ -494,6 +500,12 @@ public:
+     typedef std::vector<WorldObject*> UpdatableObjectList;
+     typedef std::unordered_set<WorldObject*> PendingAddUpdatableObjectList;
+ 
++    bool IsParentMap() const { return GetParent() == this; }
++#ifdef ELUNA
++    Eluna* GetEluna() const { return eluna.get(); }
++
++    LuaVal lua_data = LuaVal({});
++#endif
+ private:
+ 
+     template<class T> void InitializeObject(T* obj);
+@@ -599,6 +611,9 @@ private:
+     UpdatableObjectList _updatableObjectList;
+     PendingAddUpdatableObjectList _pendingAddUpdatableObjectList;
+     IntervalTimer _updatableObjectListRecheckTimer;
++#ifdef ELUNA
++        std::unique_ptr<Eluna> eluna;
++#endif
+ };
+ 
+ enum InstanceResetMethod
+diff --git a/src/server/game/Maps/MapMgr.cpp b/src/server/game/Maps/MapMgr.cpp
+index e113c93d2..4988c6798 100644
+--- a/src/server/game/Maps/MapMgr.cpp
++++ b/src/server/game/Maps/MapMgr.cpp
+@@ -34,6 +34,9 @@
+ #include "Transport.h"
+ #include "World.h"
+ #include "WorldPacket.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ MapMgr::MapMgr()
+ {
+diff --git a/src/server/game/Scripting/ScriptDefines/AllItemScript.cpp b/src/server/game/Scripting/ScriptDefines/AllItemScript.cpp
+index c276bb5d0..7f72c4c8a 100644
+--- a/src/server/game/Scripting/ScriptDefines/AllItemScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/AllItemScript.cpp
+@@ -20,6 +20,10 @@
+ #include "ScriptMgr.h"
+ #include "ScriptMgrMacros.h"
+ #include "ScriptedGossip.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#include "Player.h"
++#endif
+ 
+ bool ScriptMgr::OnQuestAccept(Player* player, Item* item, Quest const* quest)
+ {
+@@ -27,6 +31,12 @@ bool ScriptMgr::OnQuestAccept(Player* player, Item* item, Quest const* quest)
+     ASSERT(item);
+     ASSERT(quest);
+ 
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        if (e->OnQuestAccept(player, item, quest))
++            return false;
++#endif
++
+     auto ret = IsValidBoolScript<AllItemScript>([&](AllItemScript* script)
+     {
+         return !script->CanItemQuestAccept(player, item, quest);
+@@ -47,6 +57,12 @@ bool ScriptMgr::OnItemUse(Player* player, Item* item, SpellCastTargets const& ta
+     ASSERT(player);
+     ASSERT(item);
+ 
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        if (!e->OnUse(player, item, targets))
++            return true;
++#endif
++
+     auto ret = IsValidBoolScript<AllItemScript>([&](AllItemScript* script)
+     {
+         return script->CanItemUse(player, item, targets);
+@@ -66,6 +82,12 @@ bool ScriptMgr::OnItemExpire(Player* player, ItemTemplate const* proto)
+     ASSERT(player);
+     ASSERT(proto);
+ 
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        if (e->OnExpire(player, proto))
++            return false;
++#endif
++
+     auto ret = IsValidBoolScript<AllItemScript>([&](AllItemScript* script)
+     {
+         return !script->CanItemExpire(player, proto);
+@@ -85,6 +107,12 @@ bool ScriptMgr::OnItemRemove(Player* player, Item* item)
+     ASSERT(player);
+     ASSERT(item);
+ 
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        if (e->OnRemove(player, item))
++            return false;
++#endif
++
+     auto ret = IsValidBoolScript<AllItemScript>([&](AllItemScript* script)
+     {
+         return !script->CanItemRemove(player, item);
+@@ -115,6 +143,11 @@ void ScriptMgr::OnGossipSelect(Player* player, Item* item, uint32 sender, uint32
+     ASSERT(player);
+     ASSERT(item);
+ 
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->HandleGossipSelectOption(player, item, sender, action, "");
++#endif
++
+     ExecuteScript<AllItemScript>([&](AllItemScript* script)
+     {
+         script->OnItemGossipSelect(player, item, sender, action);
+@@ -131,6 +164,11 @@ void ScriptMgr::OnGossipSelectCode(Player* player, Item* item, uint32 sender, ui
+     ASSERT(player);
+     ASSERT(item);
+ 
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->HandleGossipSelectOption(player, item, sender, action, code);
++#endif
++
+     ExecuteScript<AllItemScript>([&](AllItemScript* script)
+     {
+         script->OnItemGossipSelectCode(player, item, sender, action, code);
+diff --git a/src/server/game/Scripting/ScriptDefines/AllMapScript.cpp b/src/server/game/Scripting/ScriptDefines/AllMapScript.cpp
+index a02ae745c..2b3064516 100644
+--- a/src/server/game/Scripting/ScriptDefines/AllMapScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/AllMapScript.cpp
+@@ -22,6 +22,10 @@
+ #include "ScriptMgr.h"
+ #include "ScriptMgrMacros.h"
+ #include "WorldMapScript.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#include "Player.h"
++#endif
+ 
+ namespace
+ {
+@@ -113,6 +117,11 @@ void ScriptMgr::OnDestroyMap(Map* map)
+ {
+     ASSERT(map);
+ 
++#ifdef ELUNA
++    if (Eluna* e = map->GetEluna())
++        e->OnDestroy(map);
++#endif
++
+     CALL_ENABLED_HOOKS(AllMapScript, ALLMAPHOOK_ON_DESTROY_MAP, script->OnDestroyMap(map));
+ 
+     ForeachMaps<WorldMapScript>(map,
+@@ -186,6 +195,13 @@ void ScriptMgr::OnPlayerEnterMap(Map* map, Player* player)
+     ASSERT(map);
+     ASSERT(player);
+ 
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnMapChanged(player);
++    if (Eluna* e = map->GetEluna())
++        e->OnPlayerEnter(map, player);
++#endif
++
+     CALL_ENABLED_HOOKS(AllMapScript, ALLMAPHOOK_ON_PLAYER_ENTER_ALL, script->OnPlayerEnterAll(map, player));
+ 
+     ExecuteScript<PlayerScript>([=](PlayerScript* script)
+@@ -217,6 +233,11 @@ void ScriptMgr::OnPlayerLeaveMap(Map* map, Player* player)
+     ASSERT(map);
+     ASSERT(player);
+ 
++#ifdef ELUNA
++    if (Eluna* e = map->GetEluna())
++        e->OnPlayerLeave(map, player);
++#endif
++
+     CALL_ENABLED_HOOKS(AllMapScript, ALLMAPHOOK_ON_PLAYER_LEAVE_ALL, script->OnPlayerLeaveAll(map, player));
+ 
+     ForeachMaps<WorldMapScript>(map,
+@@ -242,6 +263,14 @@ void ScriptMgr::OnMapUpdate(Map* map, uint32 diff)
+ {
+     ASSERT(map);
+ 
++#ifdef ELUNA
++    if (Eluna* e = map->GetEluna())
++    {
++        e->UpdateEluna(diff);
++        e->OnMapUpdate(map, diff);
++    }
++#endif
++
+     CALL_ENABLED_HOOKS(AllMapScript, ALLMAPHOOK_ON_MAP_UPDATE, script->OnMapUpdate(map, diff));
+ 
+     ForeachMaps<WorldMapScript>(map,
+diff --git a/src/server/game/Scripting/ScriptDefines/AreaTriggerScript.cpp b/src/server/game/Scripting/ScriptDefines/AreaTriggerScript.cpp
+index 6d3429606..8196ba846 100644
+--- a/src/server/game/Scripting/ScriptDefines/AreaTriggerScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/AreaTriggerScript.cpp
+@@ -20,12 +20,21 @@
+ #include "Player.h"
+ #include "ScriptMgr.h"
+ #include "ScriptMgrMacros.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ bool ScriptMgr::OnAreaTrigger(Player* player, AreaTrigger const* trigger)
+ {
+     ASSERT(player);
+     ASSERT(trigger);
+ 
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        if (e->OnAreaTrigger(player, trigger))
++            return false;
++#endif
++
+     auto ret = IsValidBoolScript<ElunaScript>([&](ElunaScript* script)
+     {
+         return script->CanAreaTrigger(player, trigger);
+diff --git a/src/server/game/Scripting/ScriptDefines/AuctionHouseScript.cpp b/src/server/game/Scripting/ScriptDefines/AuctionHouseScript.cpp
+index be3e010cf..8048969b0 100644
+--- a/src/server/game/Scripting/ScriptDefines/AuctionHouseScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/AuctionHouseScript.cpp
+@@ -18,12 +18,20 @@
+ #include "AuctionHouseScript.h"
+ #include "ScriptMgr.h"
+ #include "ScriptMgrMacros.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ void ScriptMgr::OnAuctionAdd(AuctionHouseObject* ah, AuctionEntry* entry)
+ {
+     ASSERT(ah);
+     ASSERT(entry);
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnAdd(ah, entry);
++#endif
++
+     CALL_ENABLED_HOOKS(AuctionHouseScript, AUCTIONHOUSEHOOK_ON_AUCTION_ADD, script->OnAuctionAdd(ah, entry));
+ }
+ 
+@@ -32,6 +40,11 @@ void ScriptMgr::OnAuctionRemove(AuctionHouseObject* ah, AuctionEntry* entry)
+     ASSERT(ah);
+     ASSERT(entry);
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnRemove(ah, entry);
++#endif
++
+     CALL_ENABLED_HOOKS(AuctionHouseScript, AUCTIONHOUSEHOOK_ON_AUCTION_REMOVE, script->OnAuctionRemove(ah, entry));
+ }
+ 
+@@ -40,6 +53,11 @@ void ScriptMgr::OnAuctionSuccessful(AuctionHouseObject* ah, AuctionEntry* entry)
+     ASSERT(ah);
+     ASSERT(entry);
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnSuccessful(ah, entry);
++#endif
++
+     CALL_ENABLED_HOOKS(AuctionHouseScript, AUCTIONHOUSEHOOK_ON_AUCTION_SUCCESSFUL, script->OnAuctionSuccessful(ah, entry));
+ }
+ 
+@@ -48,6 +66,11 @@ void ScriptMgr::OnAuctionExpire(AuctionHouseObject* ah, AuctionEntry* entry)
+     ASSERT(ah);
+     ASSERT(entry);
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnExpire(ah, entry);
++#endif
++
+     CALL_ENABLED_HOOKS(AuctionHouseScript, AUCTIONHOUSEHOOK_ON_AUCTION_EXPIRE, script->OnAuctionExpire(ah, entry));
+ }
+ 
+diff --git a/src/server/game/Scripting/ScriptDefines/CreatureScript.cpp b/src/server/game/Scripting/ScriptDefines/CreatureScript.cpp
+index d1a76580d..7dfb764fd 100644
+--- a/src/server/game/Scripting/ScriptDefines/CreatureScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/CreatureScript.cpp
+@@ -20,6 +20,9 @@
+ #include "ScriptMgr.h"
+ #include "ScriptMgrMacros.h"
+ #include "ScriptedGossip.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ bool ScriptMgr::OnGossipHello(Player* player, Creature* creature)
+ {
+@@ -157,6 +160,12 @@ CreatureAI* ScriptMgr::GetCreatureAI(Creature* creature)
+ {
+     ASSERT(creature);
+ 
++#ifdef ELUNA
++    if (Eluna* e = creature->GetEluna())
++        if (CreatureAI* luaAI = e->GetAI(creature))
++            return luaAI;
++#endif
++
+     auto retAI = GetReturnAIScript<AllCreatureScript, CreatureAI>([creature](AllCreatureScript* script)
+     {
+         return script->GetCreatureAI(creature);
+diff --git a/src/server/game/Scripting/ScriptDefines/GroupScript.cpp b/src/server/game/Scripting/ScriptDefines/GroupScript.cpp
+index aed5e68ff..f1613373d 100644
+--- a/src/server/game/Scripting/ScriptDefines/GroupScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/GroupScript.cpp
+@@ -18,11 +18,19 @@
+ #include "GroupScript.h"
+ #include "ScriptMgr.h"
+ #include "ScriptMgrMacros.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ void ScriptMgr::OnGroupAddMember(Group* group, ObjectGuid guid)
+ {
+     ASSERT(group);
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnAddMember(group, guid);
++#endif
++
+     CALL_ENABLED_HOOKS(GroupScript, GROUPHOOK_ON_ADD_MEMBER, script->OnAddMember(group, guid));
+ }
+ 
+@@ -30,6 +38,11 @@ void ScriptMgr::OnGroupInviteMember(Group* group, ObjectGuid guid)
+ {
+     ASSERT(group);
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnInviteMember(group, guid);
++#endif
++
+     CALL_ENABLED_HOOKS(GroupScript, GROUPHOOK_ON_INVITE_MEMBER, script->OnInviteMember(group, guid));
+ }
+ 
+@@ -37,6 +50,11 @@ void ScriptMgr::OnGroupRemoveMember(Group* group, ObjectGuid guid, RemoveMethod
+ {
+     ASSERT(group);
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnRemoveMember(group, guid, method);
++#endif
++
+     CALL_ENABLED_HOOKS(GroupScript, GROUPHOOK_ON_REMOVE_MEMBER, script->OnRemoveMember(group, guid, method, kicker, reason));
+ }
+ 
+@@ -44,6 +62,11 @@ void ScriptMgr::OnGroupChangeLeader(Group* group, ObjectGuid newLeaderGuid, Obje
+ {
+     ASSERT(group);
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnChangeLeader(group, newLeaderGuid, oldLeaderGuid);
++#endif
++
+     CALL_ENABLED_HOOKS(GroupScript, GROUPHOOK_ON_CHANGE_LEADER, script->OnChangeLeader(group, newLeaderGuid, oldLeaderGuid));
+ }
+ 
+@@ -51,6 +74,11 @@ void ScriptMgr::OnGroupDisband(Group* group)
+ {
+     ASSERT(group);
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnDisband(group);
++#endif
++
+     CALL_ENABLED_HOOKS(GroupScript, GROUPHOOK_ON_DISBAND, script->OnDisband(group));
+ }
+ 
+diff --git a/src/server/game/Scripting/ScriptDefines/GuildScript.cpp b/src/server/game/Scripting/ScriptDefines/GuildScript.cpp
+index 480c9968c..2324e380a 100644
+--- a/src/server/game/Scripting/ScriptDefines/GuildScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/GuildScript.cpp
+@@ -18,59 +18,106 @@
+ #include "GuildScript.h"
+ #include "ScriptMgr.h"
+ #include "ScriptMgrMacros.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ void ScriptMgr::OnGuildAddMember(Guild* guild, Player* player, uint8& plRank)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnAddMember(guild, player, plRank);
++#endif
+     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_ADD_MEMBER, script->OnAddMember(guild, player, plRank));
+ }
+ 
+ void ScriptMgr::OnGuildRemoveMember(Guild* guild, Player* player, bool isDisbanding, bool isKicked)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnRemoveMember(guild, player, isDisbanding);
++#endif
+     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_REMOVE_MEMBER, script->OnRemoveMember(guild, player, isDisbanding, isKicked));
+ }
+ 
+ void ScriptMgr::OnGuildMOTDChanged(Guild* guild, const std::string& newMotd)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnMOTDChanged(guild, newMotd);
++#endif
+     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_MOTD_CHANGED, script->OnMOTDChanged(guild, newMotd));
+ }
+ 
+ void ScriptMgr::OnGuildInfoChanged(Guild* guild, const std::string& newInfo)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnInfoChanged(guild, newInfo);
++#endif
+     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_INFO_CHANGED, script->OnInfoChanged(guild, newInfo));
+ }
+ 
+ void ScriptMgr::OnGuildCreate(Guild* guild, Player* leader, const std::string& name)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnCreate(guild, leader, name);
++#endif
+     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_CREATE, script->OnCreate(guild, leader, name));
+ }
+ 
+ void ScriptMgr::OnGuildDisband(Guild* guild)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnDisband(guild);
++#endif
+     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_DISBAND, script->OnDisband(guild));
+ }
+ 
+ void ScriptMgr::OnGuildMemberWitdrawMoney(Guild* guild, Player* player, uint32& amount, bool isRepair)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnMemberWitdrawMoney(guild, player, amount, isRepair);
++#endif
+     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_MEMBER_WITDRAW_MONEY, script->OnMemberWitdrawMoney(guild, player, amount, isRepair));
+ }
+ 
+ void ScriptMgr::OnGuildMemberDepositMoney(Guild* guild, Player* player, uint32& amount)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnMemberDepositMoney(guild, player, amount);
++#endif
+     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_MEMBER_DEPOSIT_MONEY, script->OnMemberDepositMoney(guild, player, amount));
+ }
+ 
+ void ScriptMgr::OnGuildItemMove(Guild* guild, Player* player, Item* pItem, bool isSrcBank, uint8 srcContainer, uint8 srcSlotId, bool isDestBank, uint8 destContainer, uint8 destSlotId)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnItemMove(guild, player, pItem, isSrcBank, srcContainer, srcSlotId, isDestBank, destContainer, destSlotId);
++#endif
+     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_ITEM_MOVE, script->OnItemMove(guild, player, pItem, isSrcBank, srcContainer, srcSlotId, isDestBank, destContainer, destSlotId));
+ }
+ 
+ void ScriptMgr::OnGuildEvent(Guild* guild, uint8 eventType, ObjectGuid::LowType playerGuid1, ObjectGuid::LowType playerGuid2, uint8 newRank)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnEvent(guild, eventType, playerGuid1, playerGuid2, newRank);
++#endif
+     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_EVENT, script->OnEvent(guild, eventType, playerGuid1, playerGuid2, newRank));
+ }
+ 
+ void ScriptMgr::OnGuildBankEvent(Guild* guild, uint8 eventType, uint8 tabId, ObjectGuid::LowType playerGuid, uint32 itemOrMoney, uint16 itemStackCount, uint8 destTabId)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnBankEvent(guild, eventType, tabId, playerGuid, itemOrMoney, itemStackCount, destTabId);
++#endif
+     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_BANK_EVENT, script->OnBankEvent(guild, eventType, tabId, playerGuid, itemOrMoney, itemStackCount, destTabId));
+ }
+ 
+diff --git a/src/server/game/Scripting/ScriptDefines/PlayerScript.cpp b/src/server/game/Scripting/ScriptDefines/PlayerScript.cpp
+index 57978f7a5..e5d501d4f 100644
+--- a/src/server/game/Scripting/ScriptDefines/PlayerScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/PlayerScript.cpp
+@@ -18,6 +18,10 @@
+ #include "PlayerScript.h"
+ #include "ScriptMgr.h"
+ #include "ScriptMgrMacros.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#include "Player.h"
++#endif
+ 
+ void ScriptMgr::OnPlayerBeforeDurabilityRepair(Player* player, ObjectGuid npcGUID, ObjectGuid itemGUID, float& discountMod, uint8 guildBank)
+ {
+@@ -26,11 +30,19 @@ void ScriptMgr::OnPlayerBeforeDurabilityRepair(Player* player, ObjectGuid npcGUI
+ 
+ void ScriptMgr::OnPlayerGossipSelect(Player* player, uint32 menu_id, uint32 sender, uint32 action)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->HandleGossipSelectOption(player, menu_id, sender, action, "");
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_GOSSIP_SELECT, script->OnPlayerGossipSelect(player, menu_id, sender, action));
+ }
+ 
+ void ScriptMgr::OnPlayerGossipSelectCode(Player* player, uint32 menu_id, uint32 sender, uint32 action, const char* code)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->HandleGossipSelectOption(player, menu_id, sender, action, code);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_GOSSIP_SELECT_CODE, script->OnPlayerGossipSelectCode(player, menu_id, sender, action, code));
+ }
+ 
+@@ -71,6 +83,10 @@ bool ScriptMgr::OnPlayerCanFlyInZone(Player* player, uint32 mapId, uint32 zoneId
+ 
+ void ScriptMgr::OnPlayerPVPKill(Player* killer, Player* killed)
+ {
++#ifdef ELUNA
++    if (Eluna* e = killer->GetEluna())
++        e->OnPVPKill(killer, killed);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_PVP_KILL, script->OnPlayerPVPKill(killer, killed));
+ }
+ 
+@@ -81,6 +97,10 @@ void ScriptMgr::OnPlayerPVPFlagChange(Player* player, bool state)
+ 
+ void ScriptMgr::OnPlayerCreatureKill(Player* killer, Creature* killed)
+ {
++#ifdef ELUNA
++    if (Eluna* e = killer->GetEluna())
++        e->OnCreatureKill(killer, killed);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_CREATURE_KILL, script->OnPlayerCreatureKill(killer, killed));
+ }
+ 
+@@ -91,21 +111,37 @@ void ScriptMgr::OnPlayerCreatureKilledByPet(Player* petOwner, Creature* killed)
+ 
+ void ScriptMgr::OnPlayerKilledByCreature(Creature* killer, Player* killed)
+ {
++#ifdef ELUNA
++    if (Eluna* e = killer->GetEluna())
++        e->OnPlayerKilledByCreature(killer, killed);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_PLAYER_KILLED_BY_CREATURE, script->OnPlayerKilledByCreature(killer, killed));
+ }
+ 
+ void ScriptMgr::OnPlayerLevelChanged(Player* player, uint8 oldLevel)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnLevelChanged(player, oldLevel);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_LEVEL_CHANGED, script->OnPlayerLevelChanged(player, oldLevel));
+ }
+ 
+ void ScriptMgr::OnPlayerFreeTalentPointsChanged(Player* player, uint32 points)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnFreeTalentPointsChanged(player, points);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_FREE_TALENT_POINTS_CHANGED, script->OnPlayerFreeTalentPointsChanged(player, points));
+ }
+ 
+ void ScriptMgr::OnPlayerTalentsReset(Player* player, bool noCost)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnTalentsReset(player, noCost);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_TALENTS_RESET, script->OnPlayerTalentsReset(player, noCost));
+ }
+ 
+@@ -116,6 +152,10 @@ void ScriptMgr::OnPlayerAfterSpecSlotChanged(Player* player, uint8 newSlot)
+ 
+ void ScriptMgr::OnPlayerMoneyChanged(Player* player, int32& amount)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnMoneyChanged(player, amount);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_MONEY_CHANGED, script->OnPlayerMoneyChanged(player, amount));
+ }
+ 
+@@ -126,11 +166,19 @@ void ScriptMgr::OnPlayerBeforeLootMoney(Player* player, Loot* loot)
+ 
+ void ScriptMgr::OnPlayerGiveXP(Player* player, uint32& amount, Unit* victim, uint8 xpSource)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnGiveXP(player, amount, victim);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_GIVE_EXP, script->OnPlayerGiveXP(player, amount, victim, xpSource));
+ }
+ 
+ bool ScriptMgr::OnPlayerReputationChange(Player* player, uint32 factionID, int32& standing, bool incremental)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnReputationChange(player, factionID, standing, incremental);
++#endif
+     CALL_ENABLED_BOOLEAN_HOOKS(PlayerScript, PLAYERHOOK_ON_REPUTATION_CHANGE, !script->OnPlayerReputationChange(player, factionID, standing, incremental));
+ }
+ 
+@@ -151,16 +199,28 @@ void ScriptMgr::OnPlayerForgotSpell(Player* player, uint32 spellID)
+ 
+ void ScriptMgr::OnPlayerDuelRequest(Player* target, Player* challenger)
+ {
++#ifdef ELUNA
++    if (Eluna* e = target->GetEluna())
++        e->OnDuelRequest(target, challenger);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_DUEL_REQUEST, script->OnPlayerDuelRequest(target, challenger));
+ }
+ 
+ void ScriptMgr::OnPlayerDuelStart(Player* player1, Player* player2)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player1->GetEluna())
++        e->OnDuelStart(player1, player2);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_DUEL_START, script->OnPlayerDuelStart(player1, player2));
+ }
+ 
+ void ScriptMgr::OnPlayerDuelEnd(Player* winner, Player* loser, DuelCompleteType type)
+ {
++#ifdef ELUNA
++    if (Eluna* e = winner->GetEluna())
++        e->OnDuelEnd(winner, loser, type);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_DUEL_END, script->OnPlayerDuelEnd(winner, loser, type));
+ }
+ 
+@@ -196,16 +256,28 @@ void ScriptMgr::OnPlayerChat(Player* player, uint32 type, uint32 lang, std::stri
+ 
+ void ScriptMgr::OnPlayerEmote(Player* player, uint32 emote)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnEmote(player, emote);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_EMOTE, script->OnPlayerEmote(player, emote));
+ }
+ 
+ void ScriptMgr::OnPlayerTextEmote(Player* player, uint32 textEmote, uint32 emoteNum, ObjectGuid guid)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnTextEmote(player, textEmote, emoteNum, guid);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_TEXT_EMOTE, script->OnPlayerTextEmote(player, textEmote, emoteNum, guid));
+ }
+ 
+ void ScriptMgr::OnPlayerSpellCast(Player* player, Spell* spell, bool skipCheck)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnSpellCast(player, spell, skipCheck);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_SPELL_CAST, script->OnPlayerSpellCast(player, spell, skipCheck));
+ }
+ 
+@@ -221,6 +293,10 @@ void ScriptMgr::OnPlayerUpdate(Player* player, uint32 p_time)
+ 
+ void ScriptMgr::OnPlayerLogin(Player* player)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnLogin(player);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_LOGIN, script->OnPlayerLogin(player));
+ }
+ 
+@@ -236,21 +312,37 @@ void ScriptMgr::OnPlayerBeforeLogout(Player* player)
+ 
+ void ScriptMgr::OnPlayerLogout(Player* player)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnLogout(player);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_LOGOUT, script->OnPlayerLogout(player));
+ }
+ 
+ void ScriptMgr::OnPlayerCreate(Player* player)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnCreate(player);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_CREATE, script->OnPlayerCreate(player));
+ }
+ 
+ void ScriptMgr::OnPlayerSave(Player* player)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnSave(player);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_SAVE, script->OnPlayerSave(player));
+ }
+ 
+ void ScriptMgr::OnPlayerDelete(ObjectGuid guid, uint32 accountId)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnDelete(GUID_LOPART(guid));
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_DELETE, script->OnPlayerDelete(guid, accountId));
+ }
+ 
+@@ -261,11 +353,19 @@ void ScriptMgr::OnPlayerFailedDelete(ObjectGuid guid, uint32 accountId)
+ 
+ void ScriptMgr::OnPlayerBindToInstance(Player* player, Difficulty difficulty, uint32 mapid, bool permanent)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnBindToInstance(player, difficulty, mapid, permanent);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_BIND_TO_INSTANCE, script->OnPlayerBindToInstance(player, difficulty, mapid, permanent));
+ }
+ 
+ void ScriptMgr::OnPlayerUpdateZone(Player* player, uint32 newZone, uint32 newArea)
+ {
++#ifdef ELUNA
++    if (Eluna* e = player->GetEluna())
++        e->OnUpdateZone(player, newZone, newArea);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_UPDATE_ZONE, script->OnPlayerUpdateZone(player, newZone, newArea));
+ }
+ 
+@@ -406,6 +506,10 @@ bool ScriptMgr::OnPlayerBeforeOpenItem(Player* player, Item* item)
+ 
+ void ScriptMgr::OnPlayerFirstLogin(Player* player)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnFirstLogin(player);
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_FIRST_LOGIN, script->OnPlayerFirstLogin(player));
+ }
+ 
+@@ -856,6 +960,14 @@ void ScriptMgr::OnPlayerLeaveCombat(Player* player)
+ 
+ void ScriptMgr::OnPlayerQuestAbandon(Player* player, uint32 questId)
+ {
++#ifdef ELUNA
++    // we can potentially add more quest status hooks here later on
++    if (Eluna* e = player->GetEluna())
++    {
++        QuestStatus qStatus = player->GetQuestStatus(questId);
++        e->OnQuestStatusChanged(player, questId, qStatus);
++    }
++#endif
+     CALL_ENABLED_HOOKS(PlayerScript, PLAYERHOOK_ON_QUEST_ABANDON, script->OnPlayerQuestAbandon(player, questId));
+ }
+ 
+diff --git a/src/server/game/Scripting/ScriptDefines/VehicleScript.cpp b/src/server/game/Scripting/ScriptDefines/VehicleScript.cpp
+index 590050f4d..237ccb035 100644
+--- a/src/server/game/Scripting/ScriptDefines/VehicleScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/VehicleScript.cpp
+@@ -18,12 +18,20 @@
+ #include "VehicleScript.h"
+ #include "ScriptMgr.h"
+ #include "Vehicle.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ void ScriptMgr::OnInstall(Vehicle* veh)
+ {
+     ASSERT(veh);
+     ASSERT(veh->GetBase()->IsCreature());
+ 
++#ifdef ELUNA
++    if (Eluna* e = veh->GetBase()->GetEluna())
++        e->OnInstall(veh);
++#endif
++
+     if (auto tempScript = ScriptRegistry<VehicleScript>::GetScriptById(veh->GetBase()->ToCreature()->GetScriptId()))
+     {
+         tempScript->OnInstall(veh);
+@@ -35,6 +43,11 @@ void ScriptMgr::OnUninstall(Vehicle* veh)
+     ASSERT(veh);
+     ASSERT(veh->GetBase()->IsCreature());
+ 
++#ifdef ELUNA
++    if (Eluna* e = veh->GetBase()->GetEluna())
++        e->OnUninstall(veh);
++#endif
++
+     if (auto tempScript = ScriptRegistry<VehicleScript>::GetScriptById(veh->GetBase()->ToCreature()->GetScriptId()))
+     {
+         tempScript->OnUninstall(veh);
+@@ -58,6 +71,11 @@ void ScriptMgr::OnInstallAccessory(Vehicle* veh, Creature* accessory)
+     ASSERT(veh->GetBase()->IsCreature());
+     ASSERT(accessory);
+ 
++#ifdef ELUNA
++    if (Eluna* e = veh->GetBase()->GetEluna())
++        e->OnInstallAccessory(veh, accessory);
++#endif
++
+     if (auto tempScript = ScriptRegistry<VehicleScript>::GetScriptById(veh->GetBase()->ToCreature()->GetScriptId()))
+     {
+         tempScript->OnInstallAccessory(veh, accessory);
+@@ -70,6 +88,11 @@ void ScriptMgr::OnAddPassenger(Vehicle* veh, Unit* passenger, int8 seatId)
+     ASSERT(veh->GetBase()->IsCreature());
+     ASSERT(passenger);
+ 
++#ifdef ELUNA
++    if (Eluna* e = veh->GetBase()->GetEluna())
++        e->OnAddPassenger(veh, passenger, seatId);
++#endif
++
+     if (auto tempScript = ScriptRegistry<VehicleScript>::GetScriptById(veh->GetBase()->ToCreature()->GetScriptId()))
+     {
+         tempScript->OnAddPassenger(veh, passenger, seatId);
+@@ -82,6 +105,11 @@ void ScriptMgr::OnRemovePassenger(Vehicle* veh, Unit* passenger)
+     ASSERT(veh->GetBase()->IsCreature());
+     ASSERT(passenger);
+ 
++#ifdef ELUNA
++    if (Eluna* e = veh->GetBase()->GetEluna())
++        e->OnRemovePassenger(veh, passenger);
++#endif
++
+     if (auto tempScript = ScriptRegistry<VehicleScript>::GetScriptById(veh->GetBase()->ToCreature()->GetScriptId()))
+     {
+         tempScript->OnRemovePassenger(veh, passenger);
+diff --git a/src/server/game/Scripting/ScriptDefines/WeatherScript.cpp b/src/server/game/Scripting/ScriptDefines/WeatherScript.cpp
+index 5232ae0ca..cdfa1bdf0 100644
+--- a/src/server/game/Scripting/ScriptDefines/WeatherScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/WeatherScript.cpp
+@@ -19,11 +19,19 @@
+ #include "ElunaScript.h"
+ #include "ScriptMgr.h"
+ #include "ScriptMgrMacros.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ void ScriptMgr::OnWeatherChange(Weather* weather, WeatherState state, float grade)
+ {
+     ASSERT(weather);
+ 
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnChange(weather, weather->GetZone(), state, grade);
++#endif
++
+     ExecuteScript<ElunaScript>([&](ElunaScript* script)
+     {
+         script->OnWeatherChange(weather, state, grade);
+diff --git a/src/server/game/Scripting/ScriptDefines/WorldScript.cpp b/src/server/game/Scripting/ScriptDefines/WorldScript.cpp
+index dc328a126..e0e63235f 100644
+--- a/src/server/game/Scripting/ScriptDefines/WorldScript.cpp
++++ b/src/server/game/Scripting/ScriptDefines/WorldScript.cpp
+@@ -18,14 +18,25 @@
+ #include "WorldScript.h"
+ #include "ScriptMgr.h"
+ #include "ScriptMgrMacros.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ void ScriptMgr::OnOpenStateChange(bool open)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnOpenStateChange(open);
++#endif
+     CALL_ENABLED_HOOKS(WorldScript, WORLDHOOK_ON_OPEN_STATE_CHANGE, script->OnOpenStateChange(open));
+ }
+ 
+ void ScriptMgr::OnAfterConfigLoad(bool reload)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnConfigLoad(reload);
++#endif
+     CALL_ENABLED_HOOKS(WorldScript, WORLDHOOK_ON_AFTER_CONFIG_LOAD, script->OnAfterConfigLoad(reload));
+ }
+ 
+@@ -46,26 +57,49 @@ void ScriptMgr::OnMotdChange(std::string& newMotd, LocaleConstant& locale)
+ 
+ void ScriptMgr::OnShutdownInitiate(ShutdownExitCode code, ShutdownMask mask)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnShutdownInitiate(code, mask);
++#endif
+     CALL_ENABLED_HOOKS(WorldScript, WORLDHOOK_ON_SHUTDOWN_INITIATE, script->OnShutdownInitiate(code, mask));
+ }
+ 
+ void ScriptMgr::OnShutdownCancel()
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnShutdownCancel();
++#endif
+     CALL_ENABLED_HOOKS(WorldScript, WORLDHOOK_ON_SHUTDOWN_CANCEL, script->OnShutdownCancel());
+ }
+ 
+ void ScriptMgr::OnWorldUpdate(uint32 diff)
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++    {
++        e->UpdateEluna(diff);
++        e->OnWorldUpdate(diff);
++    }
++#endif
+     CALL_ENABLED_HOOKS(WorldScript, WORLDHOOK_ON_UPDATE, script->OnUpdate(diff));
+ }
+ 
+ void ScriptMgr::OnStartup()
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnStartup();
++#endif
+     CALL_ENABLED_HOOKS(WorldScript, WORLDHOOK_ON_STARTUP, script->OnStartup());
+ }
+ 
+ void ScriptMgr::OnShutdown()
+ {
++#ifdef ELUNA
++    if (Eluna* e = sWorld->GetEluna())
++        e->OnShutdown();
++#endif
+     CALL_ENABLED_HOOKS(WorldScript, WORLDHOOK_ON_SHUTDOWN, script->OnShutdown());
+ }
+ 
+diff --git a/src/server/game/Server/WorldSession.cpp b/src/server/game/Server/WorldSession.cpp
+index c8d336fe5..ae6b412d5 100644
+--- a/src/server/game/Server/WorldSession.cpp
++++ b/src/server/game/Server/WorldSession.cpp
+@@ -54,6 +54,9 @@
+ #include "WorldSocket.h"
+ #include "WorldState.h"
+ #include <zlib.h>
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ namespace
+ {
+@@ -289,6 +292,17 @@ void WorldSession::SendPacket(WorldPacket const* packet)
+     }
+ #endif                                                      // !ACORE_DEBUG
+ 
++#ifdef ELUNA
++    if (Player* plr = GetPlayer())
++    {
++        if (Eluna* e = plr->GetEluna())
++        {
++            if (!e->OnPacketSend(this, *packet))
++                return;
++        }
++    }
++#endif
++
+     if (!sScriptMgr->CanPacketSend(this, *packet))
+     {
+         return;
+@@ -397,7 +411,11 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
+                     {
+                         if (!sScriptMgr->CanPacketReceive(this, *packet))
+                             break;
+-
++#ifdef ELUNA
++                        if (Eluna* e = sWorld->GetEluna())
++                            if (!e->OnPacketReceive(this, *packet))
++                                break;
++#endif
+                         opHandle->Call(this, *packet);
+                         LogUnprocessedTail(packet);
+                     }
+@@ -415,7 +433,11 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
+                         // not expected _player or must checked in packet hanlder
+                         if (!sScriptMgr->CanPacketReceive(this, *packet))
+                             break;
+-
++#ifdef ELUNA
++                        if (Eluna* e = sWorld->GetEluna())
++                            if (!e->OnPacketReceive(this, *packet))
++                                break;
++#endif
+                         opHandle->Call(this, *packet);
+                         LogUnprocessedTail(packet);
+                     }
+@@ -425,7 +447,11 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
+                     {
+                         if (!sScriptMgr->CanPacketReceive(this, *packet))
+                             break;
+-
++#ifdef ELUNA
++                        if (Eluna* e = sWorld->GetEluna())
++                            if (!e->OnPacketReceive(this, *packet))
++                                break;
++#endif
+                         opHandle->Call(this, *packet);
+                         LogUnprocessedTail(packet);
+                     }
+@@ -441,7 +467,11 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
+ 
+                     if (!sScriptMgr->CanPacketReceive(this, *packet))
+                         break;
+-
++#ifdef ELUNA
++                    if (Eluna* e = sWorld->GetEluna())
++                        if (!e->OnPacketReceive(this, *packet))
++                            break;
++#endif
+                     opHandle->Call(this, *packet);
+                     LogUnprocessedTail(packet);
+                     break;
+diff --git a/src/server/game/Spells/Auras/SpellAuraEffects.cpp b/src/server/game/Spells/Auras/SpellAuraEffects.cpp
+index eb470bd9e..e95ed2c1c 100644
+--- a/src/server/game/Spells/Auras/SpellAuraEffects.cpp
++++ b/src/server/game/Spells/Auras/SpellAuraEffects.cpp
+@@ -39,6 +39,9 @@
+ #include "Util.h"
+ #include "Vehicle.h"
+ #include "WorldPacket.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ /// @todo: this import is not necessary for compilation and marked as unused by the IDE
+ //  however, for some reasons removing it would cause a damn linking issue
+@@ -6547,7 +6550,12 @@ void AuraEffect::HandlePeriodicTriggerSpellAuraTick(Unit* target, Unit* caster)
+             TriggerCastFlags triggerFlags = TRIGGERED_FULL_MASK;
+             if (GetSpellInfo()->Effects[GetEffIndex()].TargetA.GetCheckType() == TARGET_CHECK_ENTRY || GetSpellInfo()->Effects[GetEffIndex()].TargetB.GetCheckType() == TARGET_CHECK_ENTRY)
+                 triggerFlags = TriggerCastFlags(TRIGGERED_FULL_MASK & ~TRIGGERED_IGNORE_POWER_AND_REAGENT_COST);
+-
++#ifdef ELUNA
++            Creature* c = target->ToCreature();
++            if (c && caster)
++                if (Eluna* e = caster->GetEluna())
++                    e->OnDummyEffect(triggerCaster, GetId(), SpellEffIndex(GetEffIndex()), c);
++#endif
+             triggerCaster->CastSpell(targets, triggeredSpellInfo, nullptr, triggerFlags, nullptr, this);
+             LOG_DEBUG("spells.aura", "AuraEffect::HandlePeriodicTriggerSpellAuraTick: Spell {} Trigger {}", GetId(), triggeredSpellInfo->Id);
+         }
+diff --git a/src/server/game/Spells/Spell.cpp b/src/server/game/Spells/Spell.cpp
+index 9ad08dd7b..127482480 100644
+--- a/src/server/game/Spells/Spell.cpp
++++ b/src/server/game/Spells/Spell.cpp
+@@ -53,6 +53,9 @@
+ #include "World.h"
+ #include "WorldPacket.h"
+ #include <cmath>
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+ /// @todo: this import is not necessary for compilation and marked as unused by the IDE
+ //  however, for some reasons removing it would cause a damn linking issue
+@@ -3820,6 +3823,11 @@ void Spell::_cast(bool skipCheck)
+         return;
+     }
+ 
++#ifdef ELUNA
++    if (Eluna* e = m_caster->GetEluna())
++        e->OnSpellCast(this, skipCheck);
++#endif
++
+     // Xinef: implement attribute SPELL_ATTR1_DISMISS_PET_FIRST, on spell cast current pet is dismissed and charms are removed
+     if (m_spellInfo->HasAttribute(SPELL_ATTR1_DISMISS_PET_FIRST))
+     {
+diff --git a/src/server/game/Spells/SpellEffects.cpp b/src/server/game/Spells/SpellEffects.cpp
+index d8dcba2d5..dc72cac74 100644
+--- a/src/server/game/Spells/SpellEffects.cpp
++++ b/src/server/game/Spells/SpellEffects.cpp
+@@ -59,6 +59,9 @@
+ #include "Vehicle.h"
+ #include "World.h"
+ #include "WorldPacket.h"
++#ifdef ELUNA
++#include "LuaEngine.h"
++#endif
+ 
+  /// @todo: this import is not necessary for compilation and marked as unused by the IDE
+ //  however, for some reasons removing it would cause a damn linking issue
+@@ -780,6 +783,18 @@ void Spell::EffectDummy(SpellEffIndex effIndex)
+     {
+         sScriptMgr->OnDummyEffect(m_caster, m_spellInfo->Id, effIndex, itemTarget);
+     }
++
++#ifdef ELUNA
++    if (Eluna* e = m_caster->GetEluna())
++    {
++        if (gameObjTarget)
++            e->OnDummyEffect(m_caster, m_spellInfo->Id, effIndex, gameObjTarget);
++        else if (unitTarget && unitTarget->GetTypeId() == TYPEID_UNIT)
++            e->OnDummyEffect(m_caster, m_spellInfo->Id, effIndex, unitTarget->ToCreature());
++        else if (itemTarget)
++            e->OnDummyEffect(m_caster, m_spellInfo->Id, effIndex, itemTarget);
++    }
++#endif
+ }
+ 
+ void Spell::EffectTriggerSpell(SpellEffIndex effIndex)
+@@ -2034,6 +2049,16 @@ void Spell::SendLoot(ObjectGuid guid, LootType loottype)
+             return;
+         }
+ 
++#ifdef ELUNA
++        if (Eluna* e = player->GetEluna())
++        {
++            if (e->OnGossipHello(player, gameObjTarget))
++                return;
++            if (e->OnGameObjectUse(player, gameObjTarget))
++                return;
++        }
++#endif
++
+         if (sScriptMgr->OnGossipHello(player, gameObjTarget))
+             return;
+ 
+diff --git a/src/server/game/World/IWorld.h b/src/server/game/World/IWorld.h
+index 1ec85b71c..f6abf0685 100644
+--- a/src/server/game/World/IWorld.h
++++ b/src/server/game/World/IWorld.h
+@@ -29,6 +29,9 @@
+ class WorldPacket;
+ class WorldSession;
+ class Player;
++#ifdef ELUNA
++class Eluna;
++#endif
+ 
+ /// Storage class for commands issued for delayed execution
+ struct AC_GAME_API CliCommandHolder
+@@ -111,6 +114,9 @@ public:
+     [[nodiscard]] virtual std::string const& GetRealmName() const = 0;
+     virtual void SetRealmName(std::string name) = 0;
+     virtual void RemoveOldCorpses() = 0;
++#ifdef ELUNA
++    [[nodiscard]] virtual Eluna* GetEluna() const = 0;
++#endif
+ };
+ 
+ #endif //AZEROTHCORE_IWORLD_H
+diff --git a/src/server/game/World/World.cpp b/src/server/game/World/World.cpp
+index c8f330abd..28e9b90af 100644
+--- a/src/server/game/World/World.cpp
++++ b/src/server/game/World/World.cpp
+@@ -99,6 +99,11 @@
+ #include "WorldStateDefines.h"
+ #include <boost/asio/ip/address.hpp>
+ #include <cmath>
++#ifdef ELUNA
++#include "LuaEngine.h"
++#include "ElunaLoader.h"
++#include "ElunaConfig.h"
++#endif
+ 
+ std::atomic_long World::_stopEvent = false;
+ uint8 World::_exitCode = SHUTDOWN_EXIT_CODE;
+@@ -343,6 +348,19 @@ void World::SetInitialWorldSettings()
+         }
+     }
+ 
++#ifdef ELUNA
++    ///- Initialize Lua Engine
++    LOG_INFO("server.loading", "Loading Eluna config...");
++    sElunaConfig->Initialize();
++
++    ///- Initialize Lua Engine
++    if (sElunaConfig->IsElunaEnabled())
++    {
++        LOG_INFO("server.loading", "Loading Lua scripts...");
++        sElunaLoader->LoadScripts();
++    }
++#endif
++
+     ///- Initialize pool manager
+     sPoolMgr->Initialize();
+ 
+@@ -855,6 +873,14 @@ void World::SetInitialWorldSettings()
+     LOG_INFO("server.loading", "Loading Creature Text Locales...");
+     sCreatureTextMgr->LoadCreatureTextLocales();
+ 
++#ifdef ELUNA
++    if (sElunaConfig->IsElunaEnabled())
++    {
++        LOG_INFO("server.loading", "Starting Eluna world state...");
++        eluna = std::make_unique<Eluna>(nullptr);
++    }
++#endif
++
+     LOG_INFO("server.loading", "Loading Scripts...");
+     sScriptMgr->LoadDatabase();
+ 
+@@ -1000,6 +1026,11 @@ void World::SetInitialWorldSettings()
+ 
+     sScriptMgr->OnBeforeWorldInitialized();
+ 
++#ifdef ELUNA
++    if(GetEluna())
++        GetEluna()->OnConfigLoad(false); // Must be done after Eluna is initialized and scripts have run.
++#endif
++
+     if (getBoolConfig(CONFIG_PRELOAD_ALL_NON_INSTANCED_MAP_GRIDS))
+     {
+         LOG_INFO("server.loading", "Loading All Grids For All Non-Instanced Maps...");
+diff --git a/src/server/game/World/World.h b/src/server/game/World/World.h
+index 2b8310efe..5a815a0ba 100644
+--- a/src/server/game/World/World.h
++++ b/src/server/game/World/World.h
+@@ -33,6 +33,9 @@
+ #include <map>
+ #include <unordered_map>
+ 
++#ifdef ELUNA
++class Eluna;
++#endif
+ class Object;
+ class WorldPacket;
+ class WorldSocket;
+@@ -243,6 +246,10 @@ public:
+ 
+     void RemoveOldCorpses() override;
+ 
++#ifdef ELUNA
++    Eluna* GetEluna() const { return eluna.get(); }
++    std::unique_ptr<Eluna> eluna;
++#endif
+ protected:
+     void _UpdateGameTime();
+     // callback for UpdateRealmCharacters
